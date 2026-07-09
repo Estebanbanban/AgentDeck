@@ -30,6 +30,18 @@ final class Notifier {
         content.userInfo = ["threadId": t.id]
         let req = UNNotificationRequest(identifier: "agentdeck-\(t.id)-\(Int(t.lastActivity.timeIntervalSince1970))",
                                         content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(req)
+        UNUserNotificationCenter.current().add(req) { err in
+            Notifier.log("notified \(t.source.rawValue) '\(t.title.prefix(40))' err=\(err?.localizedDescription ?? "none")")
+        }
+    }
+
+    static func log(_ msg: String) {
+        let line = "\(Date()) \(msg)\n"
+        let path = NSHomeDirectory() + "/Library/Logs/AgentDeck.log"
+        if let fh = FileHandle(forWritingAtPath: path) {
+            fh.seekToEndOfFile(); fh.write(line.data(using: .utf8)!); try? fh.close()
+        } else {
+            try? line.write(toFile: path, atomically: true, encoding: .utf8)
+        }
     }
 }

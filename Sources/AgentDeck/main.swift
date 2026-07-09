@@ -7,14 +7,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     var panel: NSPanel!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Notifier.log("launched")
         store.start()
         if Bundle.main.bundleIdentifier != nil {
             store.notifier.requestAuth()
             UNUserNotificationCenter.current().delegate = self
         }
-        panel = makePanel()
-        panel.orderFrontRegardless()
+        if ProcessInfo.processInfo.environment["AGENTDECK_HEADLESS"] == nil {
+            panel = makePanel()
+            panel.orderFrontRegardless()
+        }
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        Notifier.log("terminating (user quit)")
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     private func makePanel() -> NSPanel {
         let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 330, height: 200),

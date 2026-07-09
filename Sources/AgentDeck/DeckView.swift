@@ -34,7 +34,7 @@ struct DeckView: View {
             Text("\(working) working · \(ready) ready")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
             Spacer()
-            Button { NSApp.terminate(nil) } label: {
+            Button { Notifier.log("quit clicked"); NSApp.terminate(nil) } label: {
                 Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
                     .foregroundStyle(.tertiary)
             }
