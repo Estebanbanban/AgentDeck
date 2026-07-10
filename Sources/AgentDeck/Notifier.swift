@@ -23,8 +23,10 @@ final class Notifier {
     }
 
     private func notify(_ t: AgentThread) {
-        let sound = [ThreadStatus.done: "Glass", .needsInput: "Ping", .error: "Basso"][t.status] ?? "Glass"
-        NSSound(named: sound)?.play()
+        if !Config.muted {
+            let sound = [ThreadStatus.done: "Glass", .needsInput: "Ping", .error: "Basso"][t.status] ?? "Glass"
+            NSSound(named: sound)?.play()
+        }
         guard Bundle.main.bundleIdentifier != nil else { return } // bare binary: sound only
         let content = UNMutableNotificationContent()
         content.title = "\(t.status.label.capitalized) — \(t.source.rawValue) · \(t.projectName)"

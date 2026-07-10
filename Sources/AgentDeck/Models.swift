@@ -44,15 +44,30 @@ struct AgentThread: Identifiable, Equatable {
     let filePath: String
     let lastActivity: Date
     var status: ThreadStatus // scanners store the content-derived status; Store overlays time rules
+    var spawned = false      // tool-spawned worker (e.g. codex exec reviewer), not a human session
 
     var projectName: String { (cwd as NSString).lastPathComponent }
 }
 
+/// Tunables. The user-facing ones are UserDefaults-backed (editable in Settings).
 enum Config {
-    /// Sessions older than this are not shown at all.
-    static let showWindow: TimeInterval = 36 * 3600
+    /// Hard ceiling: sessions older than this are never shown (starred included).
+    static var showWindow: TimeInterval { hours("windowHours", 36) }
+    /// Done/idle rows auto-expire after this (starred rows are exempt).
+    static var doneRetention: TimeInterval { hours("doneRetentionHours", 3) }
+    /// Needs-input / error rows auto-expire after this (starred exempt).
+    static var needsRetention: TimeInterval { hours("needsRetentionHours", 12) }
     /// Rows untouched for this long render heavily dimmed.
-    static let dimAfter: TimeInterval = 24 * 3600
+    static var dimAfter: TimeInterval { hours("dimAfterHours", 24) }
+    /// A needs-input row waiting longer than this shows a red timer.
+    static var overdueAfter: TimeInterval { 60 * (minutes("overdueMinutes", 10)) }
+    /// DND: mute completion sounds (banners still show).
+    static var muted: Bool { UserDefaults.standard.bool(forKey: "muted") }
+    /// Hide tool-spawned Codex agents (adversarial reviewers etc.). Default on.
+    static var hideSpawned: Bool {
+        UserDefaults.standard.object(forKey: "hideSpawned") as? Bool ?? true
+    }
+
     /// File written within this many seconds => working.
     static let workingWindow: TimeInterval = 25
     /// No activity for this long => idle.
@@ -62,4 +77,13 @@ enum Config {
     static let animDuration: TimeInterval = 0.22
     static let tailBytes = 64 * 1024
     static let headBytes = 256 * 1024
+
+    private static func hours(_ key: String, _ def: Double) -> TimeInterval {
+        let v = UserDefaults.standard.double(forKey: key)
+        return (v > 0 ? v : def) * 3600
+    }
+    private static func minutes(_ key: String, _ def: Double) -> Double {
+        let v = UserDefaults.standard.double(forKey: key)
+        return v > 0 ? v : def
+    }
 }

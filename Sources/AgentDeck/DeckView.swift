@@ -7,11 +7,15 @@ extension Notification.Name {
 struct DeckView: View {
     @ObservedObject var store: Store
     @AppStorage("compactMode") private var compact = false
+    @AppStorage("focusStarred") private var focus = false
+    @State private var showSettings = false
 
-    /// Compact mode keeps only what's actionable or in flight.
+    /// Compact keeps only what's actionable or in flight; focus keeps starred only.
     private var visible: [AgentThread] {
-        compact ? store.threads.filter { $0.status.rawValue <= ThreadStatus.working.rawValue }
-                : store.threads
+        var list = store.threads
+        if focus { list = list.filter { store.starred.contains($0.id) } }
+        if compact { list = list.filter { $0.status.rawValue <= ThreadStatus.working.rawValue } }
+        return list
     }
 
     var body: some View {
@@ -25,14 +29,22 @@ struct DeckView: View {
         .onChange(of: compact) { _ in
             NotificationCenter.default.post(name: .agentDeckResize, object: nil)
         }
+        .onChange(of: focus) { _ in
+            NotificationCenter.default.post(name: .agentDeckResize, object: nil)
+        }
+        .onChange(of: showSettings) { _ in
+            NotificationCenter.default.post(name: .agentDeckResize, object: nil)
+        }
     }
 
     private var card: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().opacity(0.4)
-            if visible.isEmpty {
-                Text(compact ? "All quiet" : "No active threads")
+            if showSettings {
+                SettingsView { showSettings = false }
+            } else if visible.isEmpty {
+                Text(focus ? "No starred threads" : compact ? "All quiet" : "No active threads")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 14)
             } else {
@@ -64,24 +76,42 @@ struct DeckView: View {
             Text("Agents").font(.system(size: 11, weight: .semibold))
             let running = store.threads.filter { $0.status == .working }.count
             let needs = store.threads.filter { $0.status == .needsInput || $0.status == .error }.count
-            (Text("\(running) running").foregroundStyle(running > 0 ? Color.purple : .secondary)
-                + Text(" · ").foregroundStyle(.secondary)
-                + Text("\(needs) need you").foregroundStyle(needs > 0 ? Color.orange : .secondary))
-                .font(.system(size: 10))
+            Text("\(running) running").font(.system(size: 10))
+                .foregroundStyle(running > 0 ? Color.purple : .secondary)
+            // Clicking the count jumps to the thread that's been waiting the longest.
+            Button(action: jumpToOldestNeedsInput) {
+                Text("· \(needs) need you").font(.system(size: 10))
+                    .foregroundStyle(needs > 0 ? Color.orange : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Jump to the longest-waiting thread")
             Spacer()
-            Button { compact.toggle() } label: {
-                Image(systemName: compact ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.tertiary)
+            headerButton(focus ? "star.fill" : "star", size: 9,
+                         color: focus ? .yellow : nil,
+                         help: "Show starred only") { focus.toggle() }
+            headerButton(compact ? "rectangle.expand.vertical" : "rectangle.compress.vertical", size: 9,
+                         help: compact ? "Full view" : "Compact view (actionable + running only)") { compact.toggle() }
+            headerButton("gearshape", size: 9, help: "Settings") { showSettings.toggle() }
+            headerButton("xmark", size: 8, help: "Quit AgentDeck") {
+                Notifier.log("quit clicked"); NSApp.terminate(nil)
             }
-            .buttonStyle(.plain)
-            .help(compact ? "Full view" : "Compact view (actionable + running only)")
-            Button { Notifier.log("quit clicked"); NSApp.terminate(nil) } label: {
-                Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.tertiary)
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    private func headerButton(_ symbol: String, size: CGFloat, color: Color? = nil,
+                              help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: size, weight: .bold))
+                .foregroundStyle(color ?? Color(nsColor: .tertiaryLabelColor))
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    private func jumpToOldestNeedsInput() {
+        let waiting = store.threads.filter { $0.status == .needsInput || $0.status == .error }
+        guard let oldest = waiting.min(by: { $0.lastActivity < $1.lastActivity }) else { return }
+        Actions.open(oldest)
     }
 }

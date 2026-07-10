@@ -94,7 +94,8 @@ enum CodexScanner {
             ?? (summary.isEmpty ? "Codex session" : TitleMaker.make(summary))
         return AgentThread(id: id, source: source, title: title, summary: summary,
                            cwd: cwd, filePath: path, lastActivity: mtime,
-                           status: content ?? .done)
+                           status: content ?? .done,
+                           spawned: originator == "codex_exec") // tool-driven, not a human session
     }
 
     private static func assistantText(_ payload: [String: Any], ptype: String) -> String? {

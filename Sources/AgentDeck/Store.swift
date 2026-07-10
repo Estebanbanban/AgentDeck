@@ -61,6 +61,17 @@ final class Store: ObservableObject {
                 return t
             }
             .filter { ($0.lastActivity.timeIntervalSince1970) > (dismissedNow[$0.id] ?? 0) }
+            .filter { !(Config.hideSpawned && $0.spawned) }
+            .filter { t in
+                // Auto-expire stale rows so the deck never needs manual gardening.
+                if star.contains(t.id) { return true }
+                let age = -t.lastActivity.timeIntervalSinceNow
+                switch t.status {
+                case .working: return true
+                case .needsInput, .error: return age < Config.needsRetention
+                case .done, .idle: return age < Config.doneRetention
+                }
+            }
             .sorted {
                 if $0.status.rawValue != $1.status.rawValue { return $0.status.rawValue < $1.status.rawValue }
                 let s0 = star.contains($0.id), s1 = star.contains($1.id)

@@ -31,6 +31,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
                 self?.resizeToFit()
             }
+            installHotkey()
+        }
+    }
+
+    /// £ anywhere toggles the deck. Global monitor needs Accessibility permission;
+    /// without it only in-app £ works (the local monitor).
+    private func installHotkey() {
+        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            if e.characters == "£" { self?.toggleDeck() }
+        }
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            if e.characters == "£" { self?.toggleDeck(); return nil }
+            return e
+        }
+    }
+
+    private func toggleDeck() {
+        guard let panel else { return }
+        if panel.isVisible {
+            panel.orderOut(nil)
+        } else {
+            panel.orderFrontRegardless()
+            resizeToFit()
         }
     }
 

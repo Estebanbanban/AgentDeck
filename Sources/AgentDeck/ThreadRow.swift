@@ -23,7 +23,8 @@ struct ThreadRow: View {
                 }
                 Spacer(minLength: 0)
                 if compact {
-                    Text(relTime).font(.system(size: 9)).foregroundStyle(.secondary).padding(.top, 2)
+                    Text(relTime).font(.system(size: 9))
+                        .foregroundStyle(overdue ? Color.red : Color.secondary).padding(.top, 2)
                 }
                 hoverButtons
             }
@@ -42,12 +43,21 @@ struct ThreadRow: View {
     }
 
     private var subtitle: some View {
-        (Text(thread.status.label).foregroundStyle(dotColor.opacity(0.9))
-            + Text(" · ").foregroundStyle(.secondary)
+        // Built in pieces: one long Text concatenation chain times out the type-checker.
+        let status: Text = Text(thread.status.label).foregroundStyle(dotColor.opacity(0.9))
+        let source: Text = Text(" · ").foregroundStyle(Color.secondary)
             + Text(thread.source.short).foregroundStyle(brandColor.opacity(0.9))
-            + Text(" · \(thread.projectName) · \(relTime)").foregroundStyle(.secondary))
+        let agent: Text = Text(thread.spawned ? " · agent" : "").foregroundStyle(Color.secondary.opacity(0.6))
+        let proj: Text = Text(" · \(thread.projectName) · ").foregroundStyle(Color.secondary)
+        let time: Text = Text(relTime).foregroundStyle(overdue ? Color.red : Color.secondary)
+        return (status + source + agent + proj + time)
             .font(.system(size: 9))
             .lineLimit(1)
+    }
+
+    /// Waiting on the user for too long: make the timer guilt-trip in red.
+    private var overdue: Bool {
+        thread.status == .needsInput && -thread.lastActivity.timeIntervalSinceNow > Config.overdueAfter
     }
 
     // Always in the layout; only its height + opacity animate, and it's clipped —
