@@ -19,9 +19,14 @@ struct DeckView: View {
                 // ponytail: no ScrollView — the panel resizes to fit all rows (see resizeToFit).
                 VStack(spacing: 1) {
                     ForEach(store.threads) { t in
-                        ThreadRow(thread: t) {
-                            withAnimation(.easeOut(duration: Config.animDuration)) { store.dismiss(t) }
-                        }
+                        ThreadRow(thread: t,
+                                  starred: store.starred.contains(t.id),
+                                  onStar: {
+                                      withAnimation(.easeOut(duration: Config.animDuration)) { store.toggleStar(t) }
+                                  },
+                                  onDismiss: {
+                                      withAnimation(.easeOut(duration: Config.animDuration)) { store.dismiss(t) }
+                                  })
                         .transition(.opacity) // no move/scale: nothing slides over neighbours
                     }
                 }
@@ -55,6 +60,8 @@ struct DeckView: View {
 
 struct ThreadRow: View {
     let thread: AgentThread
+    let starred: Bool
+    let onStar: () -> Void
     let onDismiss: () -> Void
     @State private var hovering = false   // immediate: highlight + ✕ button
     @State private var expanded = false   // delayed: summary reveal (hover intent)
@@ -84,26 +91,41 @@ struct ThreadRow: View {
                             .lineLimit(5)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.top, 3)
-                            .frame(maxHeight: expanded ? .infinity : 0, alignment: .top)
+                            // Finite -> finite so the height actually interpolates
+                            // (0 <-> .infinity is not animatable and twitches).
+                            .frame(maxHeight: expanded ? 160 : 0, alignment: .top)
                             .clipped()
                             .opacity(expanded ? 1 : 0)
                     }
                 }
                 Spacer(minLength: 0)
-                if hovering {
+                // Always in the layout (opacity-only) so hovering never reflows the row.
+                HStack(spacing: 5) {
+                    Button(action: onStar) {
+                        Image(systemName: starred ? "star.fill" : "star")
+                            .font(.system(size: 10))
+                            .foregroundStyle(starred ? Color.yellow : Color.secondary)
+                            .scaleEffect(starred ? 1.15 : 1)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(starred || hovering ? 1 : 0)
+                    .help("Pin as priority")
                     Button(action: onDismiss) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                     }
                     .buttonStyle(.plain)
+                    .opacity(hovering ? 1 : 0)
                     .help("Remove from deck (transcript untouched)")
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(brandColor.opacity(hovering ? 0.14 : 0.06),
-                        in: RoundedRectangle(cornerRadius: 6))
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(Color.yellow.opacity(starred ? 0.45 : 0), lineWidth: 1))
             .contentShape(Rectangle())
+            .animation(.spring(response: 0.35, dampingFraction: 0.6), value: starred)
         }
         .buttonStyle(.plain)
         .animation(.easeOut(duration: Config.animDuration), value: expanded)
@@ -130,6 +152,11 @@ struct ThreadRow: View {
     /// Claude = its signature coral/orange, Codex = blue.
     private var brandColor: Color {
         thread.source.isClaude ? Color(red: 0.85, green: 0.47, blue: 0.34) : Color.blue
+    }
+
+    private var rowBackground: Color {
+        if starred { return Color.yellow.opacity(hovering ? 0.20 : 0.12) }
+        return brandColor.opacity(hovering ? 0.14 : 0.06)
     }
 
     private var dotColor: Color {

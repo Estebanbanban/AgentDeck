@@ -11,6 +11,8 @@ final class Store: ObservableObject {
     /// unless it produces NEWER activity (then it earned its way back).
     private var dismissed: [String: TimeInterval] =
         (UserDefaults.standard.dictionary(forKey: "dismissed") as? [String: TimeInterval]) ?? [:]
+    @Published var starred: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: "starred") ?? [])
 
     func start() {
         let t = DispatchSource.makeTimerSource(queue: queue)
@@ -18,6 +20,23 @@ final class Store: ObservableObject {
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume()
         timer = t
+    }
+
+    func toggleStar(_ t: AgentThread) {
+        if starred.contains(t.id) { starred.remove(t.id) } else { starred.insert(t.id) }
+        UserDefaults.standard.set(Array(starred), forKey: "starred")
+        resort()
+    }
+
+    /// Re-apply the sort in place (starred rows float to the top of their status group).
+    private func resort() {
+        let star = starred
+        threads.sort {
+            if $0.status.rawValue != $1.status.rawValue { return $0.status.rawValue < $1.status.rawValue }
+            let s0 = star.contains($0.id), s1 = star.contains($1.id)
+            if s0 != s1 { return s0 }
+            return $0.lastActivity > $1.lastActivity
+        }
     }
 
     func dismiss(_ t: AgentThread) {
@@ -33,12 +52,14 @@ final class Store: ObservableObject {
         var byId: [String: AgentThread] = [:]
         for t in all { if let old = byId[t.id], old.lastActivity >= t.lastActivity { continue }; byId[t.id] = t }
         let dismissedNow = dismissed
+        let star = starred
         all = byId.values
             .filter { ($0.lastActivity.timeIntervalSince1970) > (dismissedNow[$0.id] ?? 0) }
             .sorted {
-                $0.status.rawValue != $1.status.rawValue
-                    ? $0.status.rawValue < $1.status.rawValue
-                    : $0.lastActivity > $1.lastActivity
+                if $0.status.rawValue != $1.status.rawValue { return $0.status.rawValue < $1.status.rawValue }
+                let s0 = star.contains($0.id), s1 = star.contains($1.id)
+                if s0 != s1 { return s0 }
+                return $0.lastActivity > $1.lastActivity
             }
         let capped = Array(all.prefix(60))
         DispatchQueue.main.async { [weak self] in
