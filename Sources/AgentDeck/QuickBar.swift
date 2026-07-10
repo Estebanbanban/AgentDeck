@@ -6,7 +6,7 @@ struct QuickBar: View {
     static let links: [(symbol: String, url: String, help: String)] = [
         ("chart.bar.xaxis", "https://us.posthog.com/project/293507", "PostHog — RTO"),
         ("arrow.triangle.branch", "https://github.com/Case-Interview-AI/AI-casing/pulls", "AI-casing PRs"),
-        ("play.rectangle.fill", "https://studio.youtube.com", "YouTube Studio"),
+        ("play.rectangle.fill", "https://www.youtube.com/", "YouTube"),
         ("slider.horizontal.3", "https://www.roadtooffer.com/admin", "RTO admin"),
         ("link.circle", "https://app.ahrefs.com", "Ahrefs"),
         ("magnifyingglass", "https://search.google.com/search-console?resource_id=sc-domain:roadtooffer.com", "Search Console"),
