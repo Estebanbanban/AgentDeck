@@ -27,6 +27,7 @@ struct AgentThread: Identifiable, Equatable {
     let id: String          // session / thread UUID
     let source: AgentSource
     let title: String
+    let summary: String     // latest assistant message snippet, shown on hover
     let cwd: String
     let filePath: String
     let lastActivity: Date

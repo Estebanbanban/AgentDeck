@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let agentDeckResize = Notification.Name("agentdeck.resize")
+}
+
 struct DeckView: View {
     @ObservedObject var store: Store
 
@@ -12,15 +16,9 @@ struct DeckView: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             } else {
-                // ponytail: no ScrollView — the panel resizes to fit (see resizeToFit);
-                // cap at 14 rows so it can't take over the screen.
+                // ponytail: no ScrollView — the panel resizes to fit all rows (see resizeToFit).
                 VStack(spacing: 1) {
-                    ForEach(store.threads.prefix(14)) { ThreadRow(thread: $0) }
-                    if store.threads.count > 14 {
-                        Text("+\(store.threads.count - 14) more")
-                            .font(.system(size: 9)).foregroundStyle(.tertiary)
-                            .frame(maxWidth: .infinity).padding(.vertical, 3)
-                    }
+                    ForEach(store.threads) { ThreadRow(thread: $0) }
                 }
                 .padding(6)
             }
@@ -54,8 +52,8 @@ struct ThreadRow: View {
 
     var body: some View {
         Button { Actions.open(thread) } label: {
-            HStack(spacing: 8) {
-                Circle().fill(dotColor).frame(width: 7, height: 7)
+            HStack(alignment: .top, spacing: 8) {
+                Circle().fill(dotColor).frame(width: 7, height: 7).padding(.top, 3)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(thread.title)
                         .font(.system(size: 11, weight: .medium))
@@ -64,6 +62,14 @@ struct ThreadRow: View {
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if hovering, !thread.summary.isEmpty {
+                        Text(thread.summary)
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(5)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 3)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -73,7 +79,10 @@ struct ThreadRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onHover { h in
+            hovering = h
+            NotificationCenter.default.post(name: .agentDeckResize, object: nil)
+        }
         .help(thread.cwd)
     }
 

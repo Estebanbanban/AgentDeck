@@ -26,7 +26,7 @@ final class Store: ObservableObject {
                 ? $0.status.rawValue < $1.status.rawValue
                 : $0.lastActivity > $1.lastActivity
         }
-        let capped = Array(all.prefix(30))
+        let capped = Array(all.prefix(60))
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if capped != self.threads { self.threads = capped }

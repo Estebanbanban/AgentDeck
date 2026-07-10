@@ -23,6 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             sub = store.$threads.receive(on: DispatchQueue.main).sink { [weak self] _ in
                 DispatchQueue.main.async { self?.resizeToFit() }
             }
+            NotificationCenter.default.addObserver(forName: .agentDeckResize, object: nil,
+                                                   queue: .main) { [weak self] _ in
+                DispatchQueue.main.async { self?.resizeToFit() }
+            }
         }
     }
 
@@ -94,6 +98,7 @@ if CommandLine.arguments.contains("--dump") {
     for t in all {
         let st = ["working", "ready", "idle"][t.status.rawValue]
         print("[\(st)] \(t.source.rawValue) | \(t.projectName) | \(t.title) | \(t.id.prefix(8)) | \(Int(-t.lastActivity.timeIntervalSinceNow))s ago")
+        if !t.summary.isEmpty { print("        ↳ \(t.summary.prefix(100))") }
     }
     exit(0)
 }

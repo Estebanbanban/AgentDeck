@@ -24,9 +24,14 @@ enum CodexScanner {
         let tail = ScanCore.tailLines(path, bytes: Config.tailBytes).compactMap(ScanCore.json)
         var working = false
         var decided = false
+        var summary: String?
         for rec in tail.reversed() {
             guard let payload = rec["payload"] as? [String: Any],
                   let ptype = payload["type"] as? String else { continue }
+            if summary == nil, let s = assistantText(payload, ptype: ptype) {
+                summary = ScanCore.clean(s, max: 280)
+            }
+            if decided { continue } // keep walking only to find a summary
             switch ptype {
             case "task_complete", "turn_aborted", "error":
                 working = false; decided = true
@@ -41,13 +46,24 @@ enum CodexScanner {
             default:
                 continue // token_count, turn_context, world_state...
             }
-            if decided { break }
+            if decided, summary != nil { break }
         }
 
         let title = bestTitle(head: head, tail: tail) ?? "Codex session"
-        return AgentThread(id: id, source: source, title: title,
+        return AgentThread(id: id, source: source, title: title, summary: summary ?? "",
                            cwd: cwd, filePath: path, lastActivity: mtime,
                            status: ScanCore.finalStatus(contentSaysWorking: working, mtime: mtime))
+    }
+
+    private static func assistantText(_ payload: [String: Any], ptype: String) -> String? {
+        if ptype == "agent_message", let m = payload["message"] as? String, !m.isEmpty { return m }
+        if ptype == "message", payload["role"] as? String == "assistant",
+           let content = payload["content"] as? [[String: Any]] {
+            let text = content.compactMap { $0["type"] as? String == "output_text" ? $0["text"] as? String : nil }
+                .joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : text
+        }
+        return nil
     }
 
     private static func bestTitle(head: [[String: Any]], tail: [[String: Any]]) -> String? {
