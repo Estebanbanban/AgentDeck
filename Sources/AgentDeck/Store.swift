@@ -54,6 +54,12 @@ final class Store: ObservableObject {
         let dismissedNow = dismissed
         let star = starred
         all = byId.values
+            .map { t -> AgentThread in
+                // Scanners cache content-derived status; overlay the time rules here.
+                var t = t
+                t.status = ScanCore.finalStatus(content: t.status, mtime: t.lastActivity)
+                return t
+            }
             .filter { ($0.lastActivity.timeIntervalSince1970) > (dismissedNow[$0.id] ?? 0) }
             .sorted {
                 if $0.status.rawValue != $1.status.rawValue { return $0.status.rawValue < $1.status.rawValue }

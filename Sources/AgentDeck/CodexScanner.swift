@@ -2,10 +2,45 @@ import Foundation
 
 /// Reads Codex sessions (CLI + Codex Desktop) from ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
 enum CodexScanner {
+    private static var cache: [String: (mtime: Date, thread: AgentThread?)] = [:]
+    private static var archived: Set<String> = []
+    private static var archivedFetchedAt = Date.distantPast
+
     static func scan(cutoff: Date) -> [AgentThread] {
+        refreshArchived()
         let root = ScanCore.home + "/.codex/sessions"
-        return ScanCore.recentFiles(root: root, suffix: ".jsonl", cutoff: cutoff)
-            .compactMap { parse(path: $0.path, mtime: $0.mtime) }
+        let files = ScanCore.recentFiles(root: root, suffix: ".jsonl", cutoff: cutoff)
+        let out = files.compactMap { (path, mtime) -> AgentThread? in
+            if let c = cache[path], c.mtime == mtime { return c.thread }
+            let t = parse(path: path, mtime: mtime)
+            cache[path] = (mtime, t)
+            return t
+        }.filter { !archived.contains($0.id) }
+        if cache.count > 3000 {
+            let seen = Set(files.map(\.path))
+            cache = cache.filter { seen.contains($0.key) }
+        }
+        return out
+    }
+
+    /// Threads archived in the Codex app carry archived=1 in its state db — drop them.
+    private static func refreshArchived() {
+        guard Date().timeIntervalSince(archivedFetchedAt) > 30 else { return }
+        archivedFetchedAt = Date()
+        // ponytail: db filename is versioned (state_5.sqlite today); pick the newest.
+        let dir = ScanCore.home + "/.codex"
+        guard let db = (try? ScanCore.fm.contentsOfDirectory(atPath: dir))?
+            .filter({ $0.hasPrefix("state_") && $0.hasSuffix(".sqlite") }).sorted().last else { return }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        p.arguments = ["-readonly", "\(dir)/\(db)", "SELECT id FROM threads WHERE archived=1"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = Pipe()
+        guard (try? p.run()) != nil else { return }
+        p.waitUntilExit()
+        let out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        archived = Set(out.split(separator: "\n").map(String.init))
     }
 
     private static func parse(path: String, mtime: Date) -> AgentThread? {
@@ -59,7 +94,7 @@ enum CodexScanner {
             ?? (summary.isEmpty ? "Codex session" : TitleMaker.make(summary))
         return AgentThread(id: id, source: source, title: title, summary: summary,
                            cwd: cwd, filePath: path, lastActivity: mtime,
-                           status: ScanCore.finalStatus(content: content ?? .done, mtime: mtime))
+                           status: content ?? .done)
     }
 
     private static func assistantText(_ payload: [String: Any], ptype: String) -> String? {

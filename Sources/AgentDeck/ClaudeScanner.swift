@@ -2,10 +2,23 @@ import Foundation
 
 /// Reads Claude Code sessions (CLI + Claude desktop app) from ~/.claude/projects/*/*.jsonl
 enum ClaudeScanner {
+    // Parse cache keyed by path; only re-parse files whose mtime changed.
+    private static var cache: [String: (mtime: Date, thread: AgentThread?)] = [:]
+
     static func scan(cutoff: Date) -> [AgentThread] {
         let root = ScanCore.home + "/.claude/projects"
-        return ScanCore.recentFiles(root: root, suffix: ".jsonl", cutoff: cutoff)
-            .compactMap { parse(path: $0.path, mtime: $0.mtime) }
+        let files = ScanCore.recentFiles(root: root, suffix: ".jsonl", cutoff: cutoff)
+        let out = files.compactMap { (path, mtime) -> AgentThread? in
+            if let c = cache[path], c.mtime == mtime { return c.thread }
+            let t = parse(path: path, mtime: mtime)
+            cache[path] = (mtime, t)
+            return t
+        }
+        if cache.count > 3000 { // prune entries that scrolled out of the window
+            let seen = Set(files.map(\.path))
+            cache = cache.filter { seen.contains($0.key) }
+        }
+        return out
     }
 
     private static func parse(path: String, mtime: Date) -> AgentThread? {
@@ -54,8 +67,7 @@ enum ClaudeScanner {
         let source: AgentSource = (entrypoint?.hasPrefix("claude-desktop") == true) ? .claudeApp : .claudeCLI
         return AgentThread(id: id, source: source, title: title, summary: summary,
                            cwd: cwd ?? ScanCore.home, filePath: path,
-                           lastActivity: mtime,
-                           status: ScanCore.finalStatus(content: contentStatus, mtime: mtime))
+                           lastActivity: mtime, status: contentStatus)
     }
 
     /// Status implied by the latest assistant record.

@@ -43,14 +43,16 @@ struct AgentThread: Identifiable, Equatable {
     let cwd: String
     let filePath: String
     let lastActivity: Date
-    let status: ThreadStatus
+    var status: ThreadStatus // scanners store the content-derived status; Store overlays time rules
 
     var projectName: String { (cwd as NSString).lastPathComponent }
 }
 
 enum Config {
     /// Sessions older than this are not shown at all.
-    static let showWindow: TimeInterval = 8 * 3600
+    static let showWindow: TimeInterval = 36 * 3600
+    /// Rows untouched for this long render heavily dimmed.
+    static let dimAfter: TimeInterval = 24 * 3600
     /// File written within this many seconds => working.
     static let workingWindow: TimeInterval = 25
     /// No activity for this long => idle.

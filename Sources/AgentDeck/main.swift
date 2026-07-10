@@ -119,6 +119,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 if CommandLine.arguments.contains("--dump") {
     let cutoff = Date().addingTimeInterval(-Config.showWindow)
     let all = (ClaudeScanner.scan(cutoff: cutoff) + CodexScanner.scan(cutoff: cutoff))
+        .map { t -> AgentThread in
+            var t = t
+            t.status = ScanCore.finalStatus(content: t.status, mtime: t.lastActivity)
+            return t
+        }
         .sorted { $0.lastActivity > $1.lastActivity }
     for t in all {
         print("[\(t.status.label)] \(t.source.rawValue) | \(t.projectName) | \(t.title) | \(t.id.prefix(8)) | \(Int(-t.lastActivity.timeIntervalSinceNow))s ago")
