@@ -92,10 +92,15 @@ enum CodexScanner {
         let summary = ScanCore.clean(summaryParts.reversed().joined(separator: " — "), max: 300)
         let title = bestTitle(head: head, tail: tail)
             ?? (summary.isEmpty ? "Codex session" : TitleMaker.make(summary))
+        // Tool-driven, not a human session: codex exec runs, plus adversarial-review
+        // prompts dispatched into Codex Desktop (originator can't distinguish those).
+        let lower = title.lowercased()
+        let spawned = originator == "codex_exec"
+            || (lower.contains("adversarial") && lower.contains("review"))
+            || lower.hasPrefix("ignore repo claude.md")
         return AgentThread(id: id, source: source, title: title, summary: summary,
                            cwd: cwd, filePath: path, lastActivity: mtime,
-                           status: content ?? .done,
-                           spawned: originator == "codex_exec") // tool-driven, not a human session
+                           status: content ?? .done, spawned: spawned)
     }
 
     private static func assistantText(_ payload: [String: Any], ptype: String) -> String? {

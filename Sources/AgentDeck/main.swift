@@ -141,12 +141,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 // Debug: `AgentDeck --dump` prints one scan and exits (QA harness, no UI).
 if CommandLine.arguments.contains("--dump") {
     let cutoff = Date().addingTimeInterval(-Config.showWindow)
-    let all = (ClaudeScanner.scan(cutoff: cutoff) + CodexScanner.scan(cutoff: cutoff))
+    let all = Titler.shared.enhance((ClaudeScanner.scan(cutoff: cutoff) + CodexScanner.scan(cutoff: cutoff))
         .map { t -> AgentThread in
             var t = t
             t.status = ScanCore.finalStatus(content: t.status, mtime: t.lastActivity)
             return t
-        }
+        })
+        .filter { !(Config.hideSpawned && $0.spawned) } // mirror the UI's filters
         .sorted { $0.lastActivity > $1.lastActivity }
     for t in all {
         print("[\(t.status.label)] \(t.source.rawValue) | \(t.projectName) | \(t.title) | \(t.id.prefix(8)) | \(Int(-t.lastActivity.timeIntervalSinceNow))s ago")

@@ -9,6 +9,7 @@ final class Titler {
 
     private var cache: [String: Entry]
     private var inFlight: Set<String> = []
+    private var failedAt: [String: TimeInterval] = [:] // per-thread backoff on API/parse failure
     private let q = DispatchQueue(label: "agentdeck.titler")
     private let cachePath = NSHomeDirectory() + "/Library/Application Support/AgentDeck/titles.json"
     private lazy var apiKey: String? = {
@@ -51,7 +52,10 @@ final class Titler {
 
     private func generate(_ t: AgentThread, keepTitle: String?) {
         q.async { [self] in
-            guard !inFlight.contains(t.id), inFlight.count < 4, Budget.allow() else { return }
+            guard !inFlight.contains(t.id), inFlight.count < 4 else { return }
+            // Backoff: a failing thread must not retry every 2s tick — that burned
+            // the whole hourly budget in under a minute.
+            guard Date().timeIntervalSince1970 - (failedAt[t.id] ?? 0) > 600, Budget.allow() else { return }
             inFlight.insert(t.id)
             let heurTitle = t.title, heurSummary = t.summary
             DispatchQueue.global(qos: .utility).async { [self] in
@@ -59,7 +63,11 @@ final class Titler {
                                   status: t.status.label, source: t.source.rawValue)
                 q.async { [self] in
                     inFlight.remove(t.id)
-                    guard var r = result else { return }
+                    guard var r = result else {
+                        failedAt[t.id] = Date().timeIntervalSince1970
+                        return
+                    }
+                    failedAt[t.id] = nil
                     if let keep = keepTitle, !keep.isEmpty { r.title = keep } // title stays stable
                     r.srcStamp = t.lastActivity.timeIntervalSince1970
                     cache[t.id] = r
@@ -85,8 +93,10 @@ final class Titler {
         let sys = """
         You title and summarize AI coding-agent threads for a glanceable dashboard. \
         Reply ONLY with JSON {"title":"...","summary":"..."}. \
-        title: <=7 words, concrete, names the actual task (project/feature), no filler. \
-        summary: <=2 short sentences, plain words: what the agent just did or found, and what it needs from the user (if anything).
+        title: <=7 words, concrete, names the actual subject (project/feature/bug). \
+        Never generic ("Continue task", "Coding session") — extract the real topic from the task text. \
+        summary: <=2 short sentences, plain words: what the agent just did or found, and what it needs from the user (if anything). \
+        If the latest message is low-signal (e.g. "ok", "no response"), summarize the overall task state instead of the message.
         """
         let user = "source: \(source)\nproject: \(project)\nstatus: \(status)\ntask: \(title)\nlatest agent message: \(summary)"
         let body: [String: Any] = ["model": "openai/gpt-oss-120b", "max_tokens": 160, "temperature": 0.2,
@@ -104,9 +114,14 @@ final class Titler {
             defer { sem.signal() }
             guard let data,
                   let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let content = (((root["choices"] as? [[String: Any]])?.first?["message"]
-                    as? [String: Any])?["content"] as? String),
+                  let msg = (root["choices"] as? [[String: Any]])?.first?["message"] as? [String: Any]
+            else { return }
+            // gpt-oss is a reasoning model: the JSON sometimes lands in `reasoning`
+            // with an empty `content`. Take whichever holds a JSON object.
+            let texts = [msg["content"] as? String, msg["reasoning"] as? String].compactMap { $0 }
+            guard let content = texts.first(where: { $0.contains("{") }),
                   let jsonStart = content.firstIndex(of: "{"), let jsonEnd = content.lastIndex(of: "}"),
+                  jsonStart < jsonEnd,
                   let parsed = (try? JSONSerialization.jsonObject(
                     with: Data(content[jsonStart...jsonEnd].utf8))) as? [String: String]
             else { return }
