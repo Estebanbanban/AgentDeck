@@ -21,10 +21,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if ProcessInfo.processInfo.environment["AGENTDECK_HEADLESS"] == nil {
             panel = makePanel()
             panel.orderFrontRegardless()
-            sub = store.$threads.receive(on: DispatchQueue.main).sink { [weak self] _ in
-                DispatchQueue.main.async { self?.resizeToFit(); self?.updateStatusItem() }
+            sub = store.$threads.receive(on: DispatchQueue.main).sink { [weak self] threads in
+                DispatchQueue.main.async {
+                    self?.resizeToFit()
+                    self?.updateStatusItem()
+                    BootBriefing.shared.autoRun(threads)
+                }
             }
             installStatusItem()
+            MusicDucker.shared.start()
             NotificationCenter.default.addObserver(forName: .agentDeckResize, object: nil,
                                                    queue: .main) { [weak self] _ in
                 DispatchQueue.main.async { self?.resizeToFit() }

@@ -12,13 +12,6 @@ final class Titler {
     private var failedAt: [String: TimeInterval] = [:] // per-thread backoff on API/parse failure
     private let q = DispatchQueue(label: "agentdeck.titler")
     private let cachePath = NSHomeDirectory() + "/Library/Application Support/AgentDeck/titles.json"
-    private lazy var apiKey: String? = {
-        guard let line = try? String(contentsOfFile: NSHomeDirectory() + "/.config/agentdeck/env",
-                                     encoding: .utf8) else { return nil }
-        let key = line.split(separator: "=", maxSplits: 1).last.map(String.init)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (key?.isEmpty == false) ? key : nil
-    }()
 
     private init() {
         let data = FileManager.default.contents(atPath: cachePath)
@@ -27,7 +20,7 @@ final class Titler {
 
     /// Swap in AI title/summary where cached; kick off generation where missing/stale.
     func enhance(_ threads: [AgentThread]) -> [AgentThread] {
-        guard apiKey != nil, !Config.aiTitlesOff else { return threads }
+        guard OpenRouter.apiKey != nil, !Config.aiTitlesOff else { return threads }
         return threads.map { t in
             var t = t
             let cached: Entry? = q.sync { cache[t.id] }
@@ -89,7 +82,6 @@ final class Titler {
 
     private func call(title: String, summary: String, project: String,
                       status: String, source: String) -> Entry? {
-        guard let key = apiKey else { return nil }
         let sys = """
         You title and summarize AI coding-agent threads for a glanceable dashboard. \
         Reply ONLY with JSON {"title":"...","summary":"..."}. \
@@ -99,42 +91,14 @@ final class Titler {
         If the latest message is low-signal (e.g. "ok", "no response"), summarize the overall task state instead of the message.
         """
         let user = "source: \(source)\nproject: \(project)\nstatus: \(status)\ntask: \(title)\nlatest agent message: \(summary)"
-        // gpt-oss reasons before it answers, and reasoning tokens count against max_tokens.
-        // At 160 a full-length thread spent every token thinking and returned empty content
-        // (finish_reason=length) — the parse failed, the call was billed, the thread backed
-        // off for 10 minutes. effort=low keeps a real thread at ~75 tokens; 400 is headroom.
-        let body: [String: Any] = ["model": "openai/gpt-oss-120b", "max_tokens": 400, "temperature": 0.2,
-                                   "reasoning": ["effort": "low"],
-                                   "messages": [["role": "system", "content": sys],
-                                                ["role": "user", "content": user]]]
-        var req = URLRequest(url: URL(string: "https://openrouter.ai/api/v1/chat/completions")!)
-        req.httpMethod = "POST"
-        req.timeoutInterval = 20
-        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        let sem = DispatchSemaphore(value: 0)
-        var entry: Entry?
-        URLSession.shared.dataTask(with: req) { data, _, _ in
-            defer { sem.signal() }
-            guard let data,
-                  let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let msg = (root["choices"] as? [[String: Any]])?.first?["message"] as? [String: Any]
-            else { return }
-            // gpt-oss is a reasoning model: the JSON sometimes lands in `reasoning`
-            // with an empty `content`. Take whichever holds a JSON object.
-            let texts = [msg["content"] as? String, msg["reasoning"] as? String].compactMap { $0 }
-            guard let content = texts.first(where: { $0.contains("{") }),
-                  let jsonStart = content.firstIndex(of: "{"), let jsonEnd = content.lastIndex(of: "}"),
-                  jsonStart < jsonEnd,
-                  let parsed = (try? JSONSerialization.jsonObject(
-                    with: Data(content[jsonStart...jsonEnd].utf8))) as? [String: String]
-            else { return }
-            entry = Entry(title: ScanCore.clean(parsed["title"] ?? "", max: 70),
-                          summary: ScanCore.clean(parsed["summary"] ?? "", max: 300), srcStamp: 0)
-        }.resume()
-        sem.wait()
-        return entry
+        guard let content = OpenRouter.chat(system: sys, user: user, maxTokens: 400),
+              let jsonStart = content.firstIndex(of: "{"), let jsonEnd = content.lastIndex(of: "}"),
+              jsonStart < jsonEnd,
+              let parsed = (try? JSONSerialization.jsonObject(
+                with: Data(content[jsonStart...jsonEnd].utf8))) as? [String: String]
+        else { return nil }
+        return Entry(title: ScanCore.clean(parsed["title"] ?? "", max: 70),
+                     summary: ScanCore.clean(parsed["summary"] ?? "", max: 300), srcStamp: 0)
     }
 }
 

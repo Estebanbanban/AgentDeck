@@ -15,6 +15,9 @@ Floating macOS mission-control for AI coding agents. Shows every live Claude Cod
 - **Star** rows to pin them (survive auto-expiry, gold glow). **Focus mode** shows starred only; **compact mode** shows actionable + running only.
 - **Menu-bar badge**: ✳ when quiet, orange count when agents are blocked on you; click toggles the deck. (Flaky on macOS 26.4 — see CLAUDE.md.)
 - **Music playbar** at the bottom: now-playing from any browser/app with prev / play-pause / next. Requires `brew install media-control`. Hidden when nothing plays.
+- **Dictation ducking**: when the mic opens (FluidVoice STT, calls) and music is playing, the system volume fades to ~12% and fades back when the mic closes. Toggle in Settings.
+- **Quick bar**: one-click launcher strip (PostHog, GitHub PRs, YouTube Studio, RTO admin, Ahrefs, Search Console, Vercel, Stripe, Supabase) — edit the list in `QuickBar.swift`.
+- **Boot briefing**: on a fresh boot (Claude app not yet running) AgentDeck opens the Claude + Codex apps and shows a gpt-oss-120b briefing of everything in flight / finished / needing you. The ☀ header button re-runs it anytime.
 
 ## Data sources
 

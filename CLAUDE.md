@@ -12,6 +12,9 @@ Personal macOS widget (Swift/SwiftUI, SPM, no Xcode project). Owner: Esteban. St
 - `Titler.swift` — OpenRouter gpt-oss-120b titles/summaries; disk cache; per-thread backoff; `Budget` caps.
 - `ThreadRow.swift` / `DeckView.swift` / `SettingsView.swift` — UI. `Actions.swift` — click routing/jump.
 - `MusicBar.swift` — `media-control stream` watcher + transport UI. `StatusBadge.swift` — badge image.
+- `OpenRouter.swift` — shared blocking gpt-oss-120b call (key file, effort=low, content-else-reasoning).
+- `MusicDucker.swift` — CoreAudio mic listener → system-volume fade while dictating.
+- `QuickBar.swift` — hardcoded launcher links. `BootBriefing.swift` — fresh-boot app-open + AI briefing.
 - `Notifier.swift` — working→ended sounds/notifications + `Notifier.log` (~/Library/Logs/AgentDeck.log).
 
 ## Hard-won gotchas (do not re-learn these)
@@ -20,7 +23,9 @@ Personal macOS widget (Swift/SwiftUI, SPM, no Xcode project). Owner: Esteban. St
 
 **gpt-oss-120b is a reasoning model**: reasoning tokens count against `max_tokens`. At 160 a realistic payload burned everything thinking → empty content, `finish_reason=length`, billed, backoff. Fix: `max_tokens: 400` + `reasoning: {effort: "low"}` (~75 completion tokens). JSON sometimes lands in `message.reasoning` with empty `content` — parser checks both.
 
-**`claude://resume` IMPORTS the transcript** — on an already-open session it spawns a duplicate "general coding session" tab in the Claude app. Check liveness first via `~/.claude/sessions/<pid>.json` (sessionId + pid; `kill(pid, 0)`), and just activate the app when live.
+**`claude://resume` IMPORTS the transcript** — on an already-open session it spawns a duplicate "general coding session" tab in the Claude app. Check liveness first via `~/.claude/sessions/<pid>.json` (sessionId + pid; `kill(pid, 0)`), and reopen the app when live. **Reopen (NSWorkspace.openApplication), not NSRunningApplication.activate** — with the app's window closed, activate shows nothing. The app's only deep-link routes are `claude://claude`, `claude://resume`, `claude://cowork/shared-artifact` (checked app.asar strings) — there is NO focus-this-session route, and the Electron AX tree exposes no session rows even with AXManualAccessibility set, so exact-session focus is not implementable today.
+
+**System volume selector** lives in AudioToolbox, not CoreAudio: `kAudioHardwareServiceDeviceProperty_VirtualMainVolume` (scope output). `kAudioDevicePropertyVirtualMainVolume` doesn't exist in the SDK. Mic-in-use detection: `kAudioDevicePropertyDeviceIsRunningSomewhere` on the default input — FluidVoice releases the mic between dictations (verified), so listener-driven duck/unduck works.
 
 **MediaRemote is locked down on macOS 15.4+** — direct framework calls return nothing. `media-control` (brew, ungive) uses the perl-adapter trick. Use `stream` (one persistent process, diff-merge into a dict; NSNull deletes keys), never poll `get`. Two traps: (1) `waitUntilExit` on the main thread during `MusicWatcher.shared` init pumps the run loop → SwiftUI re-enters `shared` → dispatch_once deadlock at launch (crash bug_type 309). Everything runs on a private serial queue. (2) killing AgentDeck orphans the perl child → sweep `pkill -f mediaremote-adapter.pl.*stream` before spawning.
 

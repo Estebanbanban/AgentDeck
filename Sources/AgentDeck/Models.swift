@@ -75,6 +75,8 @@ enum Config {
     }
     /// Kill switch for OpenRouter titles/summaries (default: on when a key exists).
     static var aiTitlesOff: Bool { UserDefaults.standard.bool(forKey: "aiTitlesOff") }
+    /// Kill switch for music ducking while the mic is in use.
+    static var duckOff: Bool { UserDefaults.standard.bool(forKey: "duckOff") }
 
     /// File written within this many seconds => working.
     static let workingWindow: TimeInterval = 25

@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage("muted") private var muted = false
     @AppStorage("hideSpawned") private var hideSpawned = true
     @AppStorage("aiTitlesOff") private var aiTitlesOff = false
+    @AppStorage("duckOff") private var duckOff = false
     let onClose: () -> Void
 
     var body: some View {
@@ -18,6 +19,8 @@ struct SettingsView: View {
             toggleRow("Hide tool-spawned agents (Codex reviewers)", $hideSpawned)
             toggleRow("AI titles & summaries (gpt-oss-120b via OpenRouter)",
                       Binding(get: { !aiTitlesOff }, set: { aiTitlesOff = !$0 }))
+            toggleRow("Duck music while dictating (mic in use)",
+                      Binding(get: { !duckOff }, set: { duckOff = !$0 }))
             Divider().opacity(0.3)
             stepperRow("Keep done/idle threads", value: $doneHours, unit: "h", range: 1...24, step: 1)
             stepperRow("Keep needs-input threads", value: $needsHours, unit: "h", range: 1...36, step: 1)

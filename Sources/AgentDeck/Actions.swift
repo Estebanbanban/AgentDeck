@@ -9,9 +9,11 @@ enum Actions {
         case .claudeApp:
             // claude://resume IMPORTS the transcript — on an already-open session it
             // spawns a duplicate "general coding session" tab. If a live process is
-            // running this session, just bring the app forward instead.
+            // running this session, reopen/activate the app instead. (Reopen, not
+            // activate: with its window closed, activate shows nothing. The app has
+            // no focus-session deep link — resume/import is the only session route.)
             if isLiveClaudeSession(t.id) {
-                activate("com.anthropic.claudefordesktop")
+                reopen("com.anthropic.claudefordesktop")
             } else {
                 openURL("claude://resume?session=\(t.id)")
             }
@@ -106,6 +108,13 @@ enum Actions {
     private static func activate(_ bundleId: String) {
         NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
             .first?.activate(options: [.activateAllWindows])
+    }
+
+    /// Launch-or-reopen: fires the app's reopen event so a closed window comes back.
+    private static func reopen(_ bundleId: String) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
+        else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     private static func escape(_ s: String) -> String {

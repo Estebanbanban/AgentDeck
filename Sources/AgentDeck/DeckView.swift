@@ -6,6 +6,7 @@ extension Notification.Name {
 
 struct DeckView: View {
     @ObservedObject var store: Store
+    @ObservedObject private var boot = BootBriefing.shared
     @AppStorage("compactMode") private var compact = false
     @AppStorage("focusStarred") private var focus = false
     @State private var showSettings = false
@@ -41,6 +42,7 @@ struct DeckView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().opacity(0.4)
+            if let b = boot.text, !showSettings { briefing(b) }
             if showSettings {
                 SettingsView { showSettings = false }
             } else if visible.isEmpty {
@@ -65,6 +67,8 @@ struct DeckView: View {
                 }
                 .padding(6)
             }
+            Divider().opacity(0.25)
+            QuickBar()
             MusicBar()
         }
         .frame(width: compact ? 260 : 330)
@@ -87,6 +91,10 @@ struct DeckView: View {
             .buttonStyle(.plain)
             .help("Jump to the longest-waiting thread")
             Spacer()
+            headerButton("sunrise", size: 9,
+                         help: "Boot: open agent apps + AI briefing of all threads") {
+                BootBriefing.shared.run(store.threads)
+            }
             headerButton(focus ? "star.fill" : "star", size: 9,
                          color: focus ? .yellow : nil,
                          help: "Show starred only") { focus.toggle() }
@@ -108,6 +116,23 @@ struct DeckView: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+
+    private func briefing(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "sunrise.fill").font(.system(size: 10))
+                .foregroundStyle(.orange).padding(.top, 1)
+            Text(text).font(.system(size: 9.5)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button { BootBriefing.shared.dismiss() } label: {
+                Image(systemName: "xmark.circle.fill").font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(8)
+        .background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+        .padding(.horizontal, 6).padding(.top, 6)
     }
 
     private func jumpToOldestNeedsInput() {
