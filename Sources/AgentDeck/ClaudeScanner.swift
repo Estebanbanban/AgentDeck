@@ -15,7 +15,7 @@ enum ClaudeScanner {
         var sessionId: String?
         var cwd: String?
         var entrypoint: String?
-        var summary: String?
+        var summaryParts: [String] = []
         var working = false
         var foundMessage = false
 
@@ -23,8 +23,10 @@ enum ClaudeScanner {
             if sessionId == nil { sessionId = rec["sessionId"] as? String }
             if cwd == nil { cwd = rec["cwd"] as? String }
             if entrypoint == nil { entrypoint = rec["entrypoint"] as? String }
-            if summary == nil, rec["type"] as? String == "assistant", let s = assistantText(rec) {
-                summary = ScanCore.clean(s, max: 280)
+            // Latest assistant text; if it's a stub ("Done."), pull in the one before it too.
+            if summaryParts.count < 2, summaryParts.joined().count < 80,
+               rec["type"] as? String == "assistant", let s = assistantText(rec) {
+                summaryParts.append(s)
             }
             guard !foundMessage, let type = rec["type"] as? String else { continue }
             if rec["isSidechain"] as? Bool == true { return nil } // subagent transcript
@@ -42,9 +44,11 @@ enum ClaudeScanner {
         guard let id = sessionId, foundMessage else { return nil }
 
         let head = ScanCore.headLines(path, bytes: Config.headBytes).compactMap(ScanCore.json)
-        let title = bestTitle(head: head, tail: tail) ?? "Claude session"
+        let summary = ScanCore.clean(summaryParts.reversed().joined(separator: " — "), max: 300)
+        let title = bestTitle(head: head, tail: tail)
+            ?? (summary.isEmpty ? "Claude session" : TitleMaker.make(summary))
         let source: AgentSource = (entrypoint?.hasPrefix("claude-desktop") == true) ? .claudeApp : .claudeCLI
-        return AgentThread(id: id, source: source, title: title, summary: summary ?? "",
+        return AgentThread(id: id, source: source, title: title, summary: summary,
                            cwd: cwd ?? ScanCore.home, filePath: path,
                            lastActivity: mtime,
                            status: ScanCore.finalStatus(contentSaysWorking: working, mtime: mtime))
@@ -74,10 +78,10 @@ enum ClaudeScanner {
             if let s = rec["summary"] as? String { return ScanCore.clean(s) }
         }
         for rec in head where rec["type"] as? String == "user" {
-            if let t = userText(rec) { return ScanCore.clean(t) }
+            if let t = userText(rec) { return TitleMaker.make(t) }
         }
         for rec in tail where rec["type"] as? String == "user" {
-            if let t = userText(rec) { return ScanCore.clean(t) }
+            if let t = userText(rec) { return TitleMaker.make(t) }
         }
         return nil
     }

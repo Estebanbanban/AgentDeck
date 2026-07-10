@@ -24,12 +24,13 @@ enum CodexScanner {
         let tail = ScanCore.tailLines(path, bytes: Config.tailBytes).compactMap(ScanCore.json)
         var working = false
         var decided = false
-        var summary: String?
+        var summaryParts: [String] = []
         for rec in tail.reversed() {
             guard let payload = rec["payload"] as? [String: Any],
                   let ptype = payload["type"] as? String else { continue }
-            if summary == nil, let s = assistantText(payload, ptype: ptype) {
-                summary = ScanCore.clean(s, max: 280)
+            if summaryParts.count < 2, summaryParts.joined().count < 80,
+               let s = assistantText(payload, ptype: ptype) {
+                summaryParts.append(s)
             }
             if decided { continue } // keep walking only to find a summary
             switch ptype {
@@ -46,11 +47,13 @@ enum CodexScanner {
             default:
                 continue // token_count, turn_context, world_state...
             }
-            if decided, summary != nil { break }
+            if decided, summaryParts.count >= 2 { break }
         }
 
-        let title = bestTitle(head: head, tail: tail) ?? "Codex session"
-        return AgentThread(id: id, source: source, title: title, summary: summary ?? "",
+        let summary = ScanCore.clean(summaryParts.reversed().joined(separator: " — "), max: 300)
+        let title = bestTitle(head: head, tail: tail)
+            ?? (summary.isEmpty ? "Codex session" : TitleMaker.make(summary))
+        return AgentThread(id: id, source: source, title: title, summary: summary,
                            cwd: cwd, filePath: path, lastActivity: mtime,
                            status: ScanCore.finalStatus(contentSaysWorking: working, mtime: mtime))
     }
@@ -67,8 +70,8 @@ enum CodexScanner {
     }
 
     private static func bestTitle(head: [[String: Any]], tail: [[String: Any]]) -> String? {
-        for rec in head { if let t = userText(rec) { return ScanCore.clean(t) } }
-        for rec in tail.reversed() { if let t = userText(rec) { return ScanCore.clean(t) } }
+        for rec in head { if let t = userText(rec) { return TitleMaker.make(t) } }
+        for rec in tail.reversed() { if let t = userText(rec) { return TitleMaker.make(t) } }
         return nil
     }
 
