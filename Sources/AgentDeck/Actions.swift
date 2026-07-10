@@ -14,6 +14,7 @@ enum Actions {
             // no focus-session deep link — resume/import is the only session route.)
             if isLiveClaudeSession(t.id) {
                 reopen("com.anthropic.claudefordesktop")
+                ClaudeAppNav.focus(sessionId: t.id) // sidebar-click the exact session
             } else {
                 openURL("claude://resume?session=\(t.id)")
             }

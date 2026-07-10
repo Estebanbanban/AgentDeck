@@ -41,25 +41,44 @@ final class MusicDucker {
         AudioObjectAddPropertyListenerBlock(inputDev, &runningAddr, q, micListener)
     }
 
+    private var restoreTask: DispatchWorkItem?
+    private var cycle = 0 // bumped by each duck; stale restore-completions no-op
+
     private func micChanged() {
         var run: UInt32 = 0
         var sz = UInt32(MemoryLayout<UInt32>.size)
         guard AudioObjectGetPropertyData(inputDev, &runningAddr, 0, nil, &sz, &run) == noErr else { return }
+        Notifier.log("ducker: mic \(run != 0 ? "OPEN" : "closed") dev=\(inputDev) vol=\(getVolume() ?? -1) saved=\(savedVolume ?? -1)")
         run != 0 ? duck() : unduck()
     }
 
     private func duck() {
-        guard !Config.duckOff, savedVolume == nil,
-              MusicWatcher.shared.now?.playing == true,
-              let vol = getVolume(), vol > 0.02 else { return }
-        savedVolume = vol
-        fade(from: vol, to: vol * 0.12)
+        restoreTask?.cancel(); restoreTask = nil
+        cycle += 1
+        guard !Config.duckOff, MusicWatcher.shared.now?.playing == true else { return }
+        // savedVolume is the TRUE pre-duck volume: set once per cycle, never
+        // overwritten while ducked/restoring — a mic flap mid-fade must not
+        // capture the ducked level as "original" (that left volume stuck low).
+        if savedVolume == nil {
+            guard let vol = getVolume(), vol > 0.02 else { return }
+            savedVolume = vol
+        }
+        guard let base = savedVolume else { return }
+        fade(from: getVolume() ?? base, to: base * 0.12)
     }
 
     private func unduck() {
-        guard let vol = savedVolume else { return }
-        savedVolume = nil
-        fade(from: getVolume() ?? 0, to: vol)
+        guard let base = savedVolume else { return }
+        let c = cycle
+        // Debounce: FluidVoice can flap the mic; only restore if it stays closed.
+        let task = DispatchWorkItem { [self] in
+            fade(from: getVolume() ?? 0, to: base)
+            q.asyncAfter(deadline: .now() + .milliseconds(500)) { [self] in
+                if cycle == c { savedVolume = nil } // ramp landed, cycle over
+            }
+        }
+        restoreTask = task
+        q.asyncAfter(deadline: .now() + .milliseconds(250), execute: task)
     }
 
     private func fade(from: Float32, to: Float32) {
