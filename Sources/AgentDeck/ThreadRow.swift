@@ -26,12 +26,14 @@ struct ThreadRow: View {
                     Text(relTime).font(.system(size: 9))
                         .foregroundStyle(overdue ? Color.red : Color.secondary).padding(.top, 2)
                 }
+                brandMark
                 hoverButtons
             }
             .padding(.horizontal, 8).padding(.vertical, compact ? 3 : 5)
             .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(Color.yellow.opacity(starred ? 0.45 : 0), lineWidth: 1))
+                .strokeBorder(Color.yellow.opacity(starred ? 0.22 : 0), lineWidth: 1))
+            .shadow(color: .yellow.opacity(starred ? 0.35 : 0), radius: starred ? 4 : 0)
             .contentShape(Rectangle())
             .animation(.spring(response: 0.35, dampingFraction: 0.6), value: starred)
         }
@@ -43,16 +45,27 @@ struct ThreadRow: View {
     }
 
     private var subtitle: some View {
-        // Built in pieces: one long Text concatenation chain times out the type-checker.
-        let status: Text = Text(thread.status.label).foregroundStyle(dotColor.opacity(0.9))
-        let source: Text = Text(" · ").foregroundStyle(Color.secondary)
-            + Text(thread.source.short).foregroundStyle(brandColor.opacity(0.9))
-        let agent: Text = Text(thread.spawned ? " · agent" : "").foregroundStyle(Color.secondary.opacity(0.6))
-        let proj: Text = Text(" · \(thread.projectName) · ").foregroundStyle(Color.secondary)
+        let agent: Text = Text(thread.spawned ? "agent · " : "").foregroundStyle(Color.secondary.opacity(0.6))
+        let proj: Text = Text("\(thread.projectName) · ").foregroundStyle(Color.secondary)
         let time: Text = Text(relTime).foregroundStyle(overdue ? Color.red : Color.secondary)
-        return (status + source + agent + proj + time)
+        return (agent + proj + time)
             .font(.system(size: 9))
             .lineLimit(1)
+    }
+
+    /// Brand mark: Claude's ✳ in coral, code-brackets in blue for Codex.
+    private var brandMark: some View {
+        Group {
+            if thread.source.isClaude {
+                Text("✳").font(.system(size: 10, weight: .bold))
+            } else {
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    .font(.system(size: 7, weight: .bold))
+            }
+        }
+        .foregroundStyle(brandColor.opacity(0.9))
+        .frame(width: 12)
+        .help(thread.source.rawValue)
     }
 
     /// Waiting on the user for too long: make the timer guilt-trip in red.
@@ -122,8 +135,8 @@ struct ThreadRow: View {
     }
 
     private var rowBackground: Color {
-        if starred { return Color.yellow.opacity(hovering ? 0.20 : 0.12) }
-        return brandColor.opacity(hovering ? 0.14 : 0.06)
+        // Starred rows keep their brand tint — the glow + gold star carry the state.
+        brandColor.opacity(hovering ? 0.14 : 0.06)
     }
 
     /// Fade stale threads: untouched >24h reads as background noise.

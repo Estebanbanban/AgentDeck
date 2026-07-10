@@ -7,7 +7,14 @@ enum Actions {
         case .codexApp:
             openURL("codex://threads/\(t.id)")
         case .claudeApp:
-            openURL("claude://resume?session=\(t.id)")
+            // claude://resume IMPORTS the transcript — on an already-open session it
+            // spawns a duplicate "general coding session" tab. If a live process is
+            // running this session, just bring the app forward instead.
+            if isLiveClaudeSession(t.id) {
+                activate("com.anthropic.claudefordesktop")
+            } else {
+                openURL("claude://resume?session=\(t.id)")
+            }
         case .claudeCLI, .codexCLI:
             jumpToCLI(t)
         }
@@ -27,7 +34,23 @@ enum Actions {
 
     // MARK: liveness
 
+    /// Claude keeps a registry at ~/.claude/sessions/<pid>.json with the sessionId;
+    /// entry + live pid == the session is open somewhere right now.
+    private static func isLiveClaudeSession(_ id: String) -> Bool {
+        let dir = NSHomeDirectory() + "/.claude/sessions"
+        for f in (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? [] {
+            guard f.hasSuffix(".json"),
+                  let data = FileManager.default.contents(atPath: "\(dir)/\(f)"),
+                  let j = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  j["sessionId"] as? String == id,
+                  let pid = j["pid"] as? Int else { continue }
+            if kill(pid_t(pid), 0) == 0 { return true }
+        }
+        return false
+    }
+
     private static func isAlive(_ t: AgentThread) -> Bool {
+        if t.source.isClaude, isLiveClaudeSession(t.id) { return true }
         let ps = shell("/bin/ps", ["axo", "command="])
         if ps.contains(t.id) { return true }
         let bin = t.source.isClaude ? "claude" : "codex"
