@@ -9,12 +9,15 @@ struct SettingsView: View {
     @AppStorage("overdueMinutes") private var overdueMin = 10.0
     @AppStorage("muted") private var muted = false
     @AppStorage("hideSpawned") private var hideSpawned = true
+    @AppStorage("aiTitlesOff") private var aiTitlesOff = false
     let onClose: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             toggleRow("Do not disturb (mute sounds)", $muted)
             toggleRow("Hide tool-spawned agents (Codex reviewers)", $hideSpawned)
+            toggleRow("AI titles & summaries (gpt-oss-120b via OpenRouter)",
+                      Binding(get: { !aiTitlesOff }, set: { aiTitlesOff = !$0 }))
             Divider().opacity(0.3)
             stepperRow("Keep done/idle threads", value: $doneHours, unit: "h", range: 1...24, step: 1)
             stepperRow("Keep needs-input threads", value: $needsHours, unit: "h", range: 1...36, step: 1)

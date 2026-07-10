@@ -67,6 +67,8 @@ enum Config {
     static var hideSpawned: Bool {
         UserDefaults.standard.object(forKey: "hideSpawned") as? Bool ?? true
     }
+    /// Kill switch for OpenRouter titles/summaries (default: on when a key exists).
+    static var aiTitlesOff: Bool { UserDefaults.standard.bool(forKey: "aiTitlesOff") }
 
     /// File written within this many seconds => working.
     static let workingWindow: TimeInterval = 25

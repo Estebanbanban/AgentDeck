@@ -53,13 +53,12 @@ final class Store: ObservableObject {
         for t in all { if let old = byId[t.id], old.lastActivity >= t.lastActivity { continue }; byId[t.id] = t }
         let dismissedNow = dismissed
         let star = starred
-        all = byId.values
-            .map { t -> AgentThread in
+        all = Titler.shared.enhance(byId.values.map { t -> AgentThread in
                 // Scanners cache content-derived status; overlay the time rules here.
                 var t = t
                 t.status = ScanCore.finalStatus(content: t.status, mtime: t.lastActivity)
                 return t
-            }
+            })
             .filter { ($0.lastActivity.timeIntervalSince1970) > (dismissedNow[$0.id] ?? 0) }
             .filter { !(Config.hideSpawned && $0.spawned) }
             .filter { t in
