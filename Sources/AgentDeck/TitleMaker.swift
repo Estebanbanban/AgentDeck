@@ -13,6 +13,8 @@ enum TitleMaker {
 
     static func make(_ raw: String) -> String {
         var t = raw.replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: #"\[([^\]]+)\]\([^)]*\)?"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"[*_`#]+"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Strip leading filler words repeatedly ("ok so can you please ...").

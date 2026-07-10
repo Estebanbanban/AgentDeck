@@ -31,10 +31,12 @@ struct DeckView: View {
     private var header: some View {
         HStack(spacing: 6) {
             Text("Agents").font(.system(size: 11, weight: .semibold))
-            let working = store.threads.filter { $0.status == .working }.count
-            let ready = store.threads.filter { $0.status == .ready }.count
-            Text("\(working) working · \(ready) ready")
-                .font(.system(size: 10)).foregroundStyle(.secondary)
+            let running = store.threads.filter { $0.status == .working }.count
+            let needs = store.threads.filter { $0.status == .needsInput || $0.status == .error }.count
+            (Text("\(running) running").foregroundStyle(running > 0 ? Color.purple : .secondary)
+                + Text(" · ").foregroundStyle(.secondary)
+                + Text("\(needs) need you").foregroundStyle(needs > 0 ? Color.orange : .secondary))
+                .font(.system(size: 10))
             Spacer()
             Button { Notifier.log("quit clicked"); NSApp.terminate(nil) } label: {
                 Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
@@ -58,9 +60,10 @@ struct ThreadRow: View {
                     Text(thread.title)
                         .font(.system(size: 11, weight: .medium))
                         .lineLimit(1)
-                    Text("\(thread.source.short) · \(thread.projectName) · \(relTime)")
+                    (Text(thread.status.label).foregroundStyle(dotColor.opacity(0.9))
+                        + Text(" · \(thread.source.short) · \(thread.projectName) · \(relTime)")
+                        .foregroundStyle(.secondary))
                         .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                     if hovering, !thread.summary.isEmpty {
                         Text(thread.summary)
@@ -88,8 +91,10 @@ struct ThreadRow: View {
 
     private var dotColor: Color {
         switch thread.status {
-        case .working: return .green
-        case .ready: return .orange
+        case .working: return .purple
+        case .done: return .green
+        case .needsInput: return .orange
+        case .error: return .red
         case .idle: return Color.gray.opacity(0.5)
         }
     }

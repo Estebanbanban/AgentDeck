@@ -18,9 +18,21 @@ enum AgentSource: String {
 }
 
 enum ThreadStatus: Int {
-    case working = 0   // actively streaming / running tools
-    case ready = 1     // turn finished, waiting on the user
-    case idle = 2      // no activity for a while
+    case needsInput = 0  // asked a question / permission prompt / interrupted
+    case error = 1       // API or task error
+    case working = 2     // actively streaming / running tools
+    case done = 3        // turn finished cleanly, nothing asked
+    case idle = 4        // no activity for a while
+
+    var label: String {
+        switch self {
+        case .needsInput: return "needs input"
+        case .error: return "error"
+        case .working: return "running"
+        case .done: return "done"
+        case .idle: return "idle"
+        }
+    }
 }
 
 struct AgentThread: Identifiable, Equatable {

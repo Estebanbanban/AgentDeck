@@ -55,14 +55,20 @@ enum ScanCore {
         return t
     }
 
-    /// Overlay time-based status on top of a content-derived one.
-    static func finalStatus(contentSaysWorking: Bool, mtime: Date, now: Date = Date()) -> ThreadStatus {
+    /// Overlay time-based rules on top of the content-derived status.
+    static func finalStatus(content: ThreadStatus, mtime: Date, now: Date = Date()) -> ThreadStatus {
         let age = now.timeIntervalSince(mtime)
-        if age < Config.workingWindow { return .working }
         if age > Config.idleAfter { return .idle }
         // ponytail: mid-tool-call with no writes for 3min = likely stuck on a
-        // permission prompt -> surface as ready so the user gets pinged.
-        if contentSaysWorking { return age < 180 ? .working : .ready }
-        return .ready
+        // permission prompt -> surface as needs-input so the user gets pinged.
+        if content == .working, age > 180 { return .needsInput }
+        return content
+    }
+
+    /// Turn-ended assistant text: a trailing question means the agent wants an answer.
+    static func endsAsQuestion(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = t.suffix(120).last(where: { !"*_`)]\"' ".contains($0) }) else { return false }
+        return last == "?"
     }
 }

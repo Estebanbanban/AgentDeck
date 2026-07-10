@@ -16,8 +16,7 @@ enum ClaudeScanner {
         var cwd: String?
         var entrypoint: String?
         var summaryParts: [String] = []
-        var working = false
-        var foundMessage = false
+        var content: ThreadStatus?
 
         for rec in tail.reversed() {
             if sessionId == nil { sessionId = rec["sessionId"] as? String }
@@ -28,20 +27,25 @@ enum ClaudeScanner {
                rec["type"] as? String == "assistant", let s = assistantText(rec) {
                 summaryParts.append(s)
             }
-            guard !foundMessage, let type = rec["type"] as? String else { continue }
+            guard content == nil, let type = rec["type"] as? String else { continue }
             if rec["isSidechain"] as? Bool == true { return nil } // subagent transcript
             switch type {
             case "progress":
-                working = true; foundMessage = true
+                content = .working
             case "user":
-                working = true; foundMessage = true // tool result or fresh prompt: model's turn
+                // Raw content (userText() strips harness noise, incl. the interrupt marker).
+                let msg = rec["message"] as? [String: Any]
+                let raw = (msg?["content"] as? String)
+                    ?? ((msg?["content"] as? [[String: Any]])?
+                        .compactMap { $0["text"] as? String }.joined(separator: " ")) ?? ""
+                content = raw.hasPrefix("[Request interrupted") ? .needsInput : .working
             case "assistant":
-                working = hasToolUse(rec); foundMessage = true
+                content = assistantStatus(rec)
             default:
                 continue // summary, file-history-snapshot, last-prompt, pr-link...
             }
         }
-        guard let id = sessionId, foundMessage else { return nil }
+        guard let id = sessionId, let contentStatus = content else { return nil }
 
         let head = ScanCore.headLines(path, bytes: Config.headBytes).compactMap(ScanCore.json)
         let summary = ScanCore.clean(summaryParts.reversed().joined(separator: " — "), max: 300)
@@ -51,13 +55,23 @@ enum ClaudeScanner {
         return AgentThread(id: id, source: source, title: title, summary: summary,
                            cwd: cwd ?? ScanCore.home, filePath: path,
                            lastActivity: mtime,
-                           status: ScanCore.finalStatus(contentSaysWorking: working, mtime: mtime))
+                           status: ScanCore.finalStatus(content: contentStatus, mtime: mtime))
     }
 
-    private static func hasToolUse(_ rec: [String: Any]) -> Bool {
+    /// Status implied by the latest assistant record.
+    private static func assistantStatus(_ rec: [String: Any]) -> ThreadStatus {
+        if rec["isApiErrorMessage"] as? Bool == true { return .error }
         guard let msg = rec["message"] as? [String: Any],
-              let content = msg["content"] as? [[String: Any]] else { return false }
-        return content.contains { $0["type"] as? String == "tool_use" }
+              let content = msg["content"] as? [[String: Any]] else { return .done }
+        for block in content where block["type"] as? String == "tool_use" {
+            // AskUserQuestion / plan approval = blocked on the user, not running.
+            let name = block["name"] as? String ?? ""
+            return ["AskUserQuestion", "ExitPlanMode"].contains(name) ? .needsInput : .working
+        }
+        let text = content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
+            .joined(separator: " ")
+        if text.hasPrefix("API Error") { return .error }
+        return ScanCore.endsAsQuestion(text) ? .needsInput : .done
     }
 
     private static func assistantText(_ rec: [String: Any]) -> String? {

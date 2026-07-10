@@ -96,8 +96,7 @@ if CommandLine.arguments.contains("--dump") {
     let all = (ClaudeScanner.scan(cutoff: cutoff) + CodexScanner.scan(cutoff: cutoff))
         .sorted { $0.lastActivity > $1.lastActivity }
     for t in all {
-        let st = ["working", "ready", "idle"][t.status.rawValue]
-        print("[\(st)] \(t.source.rawValue) | \(t.projectName) | \(t.title) | \(t.id.prefix(8)) | \(Int(-t.lastActivity.timeIntervalSinceNow))s ago")
+        print("[\(t.status.label)] \(t.source.rawValue) | \(t.projectName) | \(t.title) | \(t.id.prefix(8)) | \(Int(-t.lastActivity.timeIntervalSinceNow))s ago")
         if !t.summary.isEmpty { print("        ↳ \(t.summary.prefix(100))") }
     }
     exit(0)

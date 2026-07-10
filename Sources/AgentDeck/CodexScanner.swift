@@ -22,8 +22,7 @@ enum CodexScanner {
         let source: AgentSource = originator.lowercased().contains("desktop") ? .codexApp : .codexCLI
 
         let tail = ScanCore.tailLines(path, bytes: Config.tailBytes).compactMap(ScanCore.json)
-        var working = false
-        var decided = false
+        var content: ThreadStatus?
         var summaryParts: [String] = []
         for rec in tail.reversed() {
             guard let payload = rec["payload"] as? [String: Any],
@@ -32,22 +31,27 @@ enum CodexScanner {
                let s = assistantText(payload, ptype: ptype) {
                 summaryParts.append(s)
             }
-            if decided { continue } // keep walking only to find a summary
-            switch ptype {
-            case "task_complete", "turn_aborted", "error":
-                working = false; decided = true
-            case "task_started", "user_message", "function_call", "custom_tool_call",
-                 "local_shell_call", "reasoning", "web_search_call":
-                working = true; decided = true
-            case "message":
-                let role = payload["role"] as? String
-                working = (role == "user"); decided = true
-            case "agent_message":
-                working = false; decided = true
-            default:
-                continue // token_count, turn_context, world_state...
+            if content == nil {
+                switch ptype {
+                case "error":
+                    content = .error
+                case "turn_aborted":
+                    content = .needsInput // user interrupted; it's waiting on them
+                case "task_complete":
+                    content = .done
+                case "task_started", "user_message", "function_call", "custom_tool_call",
+                     "local_shell_call", "reasoning", "web_search_call":
+                    content = .working
+                case "message":
+                    content = (payload["role"] as? String == "user") ? .working : .done
+                case "agent_message":
+                    let m = payload["message"] as? String ?? ""
+                    content = ScanCore.endsAsQuestion(m) ? .needsInput : .done
+                default:
+                    break // token_count, turn_context, world_state...
+                }
             }
-            if decided, summaryParts.count >= 2 { break }
+            if content != nil, summaryParts.count >= 2 { break }
         }
 
         let summary = ScanCore.clean(summaryParts.reversed().joined(separator: " — "), max: 300)
@@ -55,7 +59,7 @@ enum CodexScanner {
             ?? (summary.isEmpty ? "Codex session" : TitleMaker.make(summary))
         return AgentThread(id: id, source: source, title: title, summary: summary,
                            cwd: cwd, filePath: path, lastActivity: mtime,
-                           status: ScanCore.finalStatus(contentSaysWorking: working, mtime: mtime))
+                           status: ScanCore.finalStatus(content: content ?? .done, mtime: mtime))
     }
 
     private static func assistantText(_ payload: [String: Any], ptype: String) -> String? {
