@@ -99,7 +99,12 @@ final class Titler {
         If the latest message is low-signal (e.g. "ok", "no response"), summarize the overall task state instead of the message.
         """
         let user = "source: \(source)\nproject: \(project)\nstatus: \(status)\ntask: \(title)\nlatest agent message: \(summary)"
-        let body: [String: Any] = ["model": "openai/gpt-oss-120b", "max_tokens": 160, "temperature": 0.2,
+        // gpt-oss reasons before it answers, and reasoning tokens count against max_tokens.
+        // At 160 a full-length thread spent every token thinking and returned empty content
+        // (finish_reason=length) — the parse failed, the call was billed, the thread backed
+        // off for 10 minutes. effort=low keeps a real thread at ~75 tokens; 400 is headroom.
+        let body: [String: Any] = ["model": "openai/gpt-oss-120b", "max_tokens": 400, "temperature": 0.2,
+                                   "reasoning": ["effort": "low"],
                                    "messages": [["role": "system", "content": sys],
                                                 ["role": "user", "content": user]]]
         var req = URLRequest(url: URL(string: "https://openrouter.ai/api/v1/chat/completions")!)
