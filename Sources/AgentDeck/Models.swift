@@ -56,6 +56,8 @@ enum Config {
     /// No activity for this long => idle.
     static let idleAfter: TimeInterval = 30 * 60
     static let pollInterval: TimeInterval = 2.0
+    /// One clock for every animation (SwiftUI + window resize) so nothing fights.
+    static let animDuration: TimeInterval = 0.22
     static let tailBytes = 64 * 1024
     static let headBytes = 256 * 1024
 }

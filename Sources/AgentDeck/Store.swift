@@ -50,7 +50,7 @@ final class Store: ObservableObject {
                 let structural = capped.map { "\($0.id)|\($0.status.rawValue)" }
                     != self.threads.map { "\($0.id)|\($0.status.rawValue)" }
                 if structural {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { self.threads = capped }
+                    withAnimation(.easeOut(duration: Config.animDuration)) { self.threads = capped }
                 } else {
                     self.threads = capped
                 }

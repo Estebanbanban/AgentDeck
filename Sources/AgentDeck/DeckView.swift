@@ -19,8 +19,10 @@ struct DeckView: View {
                 // ponytail: no ScrollView — the panel resizes to fit all rows (see resizeToFit).
                 VStack(spacing: 1) {
                     ForEach(store.threads) { t in
-                        ThreadRow(thread: t) { withAnimation(.easeOut(duration: 0.2)) { store.dismiss(t) } }
-                            .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+                        ThreadRow(thread: t) {
+                            withAnimation(.easeOut(duration: Config.animDuration)) { store.dismiss(t) }
+                        }
+                        .transition(.opacity) // no move/scale: nothing slides over neighbours
                     }
                 }
                 .padding(6)
@@ -54,7 +56,9 @@ struct DeckView: View {
 struct ThreadRow: View {
     let thread: AgentThread
     let onDismiss: () -> Void
-    @State private var hovering = false
+    @State private var hovering = false   // immediate: highlight + ✕ button
+    @State private var expanded = false   // delayed: summary reveal (hover intent)
+    @State private var expandTask: DispatchWorkItem?
 
     var body: some View {
         Button { Actions.open(thread) } label: {
@@ -69,14 +73,18 @@ struct ThreadRow: View {
                         .foregroundStyle(.secondary))
                         .font(.system(size: 9))
                         .lineLimit(1)
-                    if hovering, !thread.summary.isEmpty {
+                    // Always in the layout; only its height + opacity animate, and it's
+                    // clipped — so the text can never paint over neighbouring rows.
+                    if !thread.summary.isEmpty {
                         Text(thread.summary)
                             .font(.system(size: 9.5))
                             .foregroundStyle(.secondary)
                             .lineLimit(5)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.top, 3)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .frame(maxHeight: expanded ? .infinity : 0, alignment: .top)
+                            .clipped()
+                            .opacity(expanded ? 1 : 0)
                     }
                 }
                 Spacer(minLength: 0)
@@ -96,10 +104,23 @@ struct ThreadRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.18), value: hovering)
+        .animation(.easeOut(duration: Config.animDuration), value: expanded)
         .onHover { h in
+            expandTask?.cancel()
             hovering = h
-            NotificationCenter.default.post(name: .agentDeckResize, object: nil)
+            if h {
+                // Hover-intent: expand only after a short dwell, so sweeping the
+                // cursor across the list doesn't cascade-expand every row.
+                let task = DispatchWorkItem {
+                    expanded = true
+                    NotificationCenter.default.post(name: .agentDeckResize, object: nil)
+                }
+                expandTask = task
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: task)
+            } else if expanded {
+                expanded = false
+                NotificationCenter.default.post(name: .agentDeckResize, object: nil)
+            }
         }
         .help(thread.cwd)
     }
