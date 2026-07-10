@@ -38,7 +38,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         var f = panel.frame
         f.origin.y += f.size.height - size.height
         f.size = size
-        panel.setFrame(f, display: true)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.18
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            ctx.allowsImplicitAnimation = true
+            panel.animator().setFrame(f, display: true)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftUI
 
 final class Store: ObservableObject {
     @Published var threads: [AgentThread] = []
@@ -43,7 +44,17 @@ final class Store: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.pruneDismissed(cutoff: cutoff)
-            if capped != self.threads { self.threads = capped }
+            if capped != self.threads {
+                // Animate only real structural changes (order/membership/status),
+                // not every mtime tick — otherwise rows shimmer every 2s.
+                let structural = capped.map { "\($0.id)|\($0.status.rawValue)" }
+                    != self.threads.map { "\($0.id)|\($0.status.rawValue)" }
+                if structural {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { self.threads = capped }
+                } else {
+                    self.threads = capped
+                }
+            }
             self.notifier.process(capped)
         }
     }

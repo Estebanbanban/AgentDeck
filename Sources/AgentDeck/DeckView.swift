@@ -19,7 +19,8 @@ struct DeckView: View {
                 // ponytail: no ScrollView — the panel resizes to fit all rows (see resizeToFit).
                 VStack(spacing: 1) {
                     ForEach(store.threads) { t in
-                        ThreadRow(thread: t) { store.dismiss(t) }
+                        ThreadRow(thread: t) { withAnimation(.easeOut(duration: 0.2)) { store.dismiss(t) } }
+                            .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
                     }
                 }
                 .padding(6)
@@ -75,6 +76,7 @@ struct ThreadRow: View {
                             .lineLimit(5)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.top, 3)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
                 Spacer(minLength: 0)
@@ -94,6 +96,7 @@ struct ThreadRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.18), value: hovering)
         .onHover { h in
             hovering = h
             NotificationCenter.default.post(name: .agentDeckResize, object: nil)
