@@ -8,6 +8,16 @@ struct DeckView: View {
     @ObservedObject var store: Store
 
     var body: some View {
+        // Card pinned to the window's top: the window is often transiently taller
+        // than the card (it grows instantly, shrinks after animations settle), and
+        // without the Spacer the hosting view would re-center — i.e. twitch.
+        VStack(spacing: 0) {
+            card
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().opacity(0.4)

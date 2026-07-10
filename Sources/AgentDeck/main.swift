@@ -27,23 +27,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                                                    queue: .main) { [weak self] _ in
                 DispatchQueue.main.async { self?.resizeToFit() }
             }
+            // Self-heal: if any resize signal was missed, converge within a second.
+            Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                self?.resizeToFit()
+            }
         }
     }
 
-    /// Resize the panel to the SwiftUI content's ideal size, keeping its top-left corner fixed.
+    /// Fit the (invisible) window to the card WITHOUT animating it — the card is
+    /// SwiftUI-animated and the window animating too is what caused the twitching.
+    /// Grow instantly (extra window area is transparent, card is top-pinned);
+    /// shrink only after the content animation has settled.
+    private var shrinkTask: DispatchWorkItem?
+
     private func resizeToFit() {
         guard let panel, let hosting else { return }
         let size = hosting.fittingSize
-        guard size.height > 10, abs(panel.frame.height - size.height) > 1 else { return }
+        guard size.height > 10 else { return }
+        shrinkTask?.cancel()
+        if size.height > panel.frame.height + 1 {
+            apply(size)
+        } else if size.height < panel.frame.height - 1 {
+            let task = DispatchWorkItem { [weak self] in
+                guard let self, let hosting = self.hosting else { return }
+                let s = hosting.fittingSize
+                if s.height > 10 { self.apply(s) }
+            }
+            shrinkTask = task
+            DispatchQueue.main.asyncAfter(deadline: .now() + Config.animDuration + 0.08, execute: task)
+        }
+    }
+
+    private func apply(_ size: NSSize) {
+        guard let panel else { return }
         var f = panel.frame
         f.origin.y += f.size.height - size.height
         f.size = size
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = Config.animDuration
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            ctx.allowsImplicitAnimation = true
-            panel.animator().setFrame(f, display: true)
-        }
+        panel.setFrame(f, display: true)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
