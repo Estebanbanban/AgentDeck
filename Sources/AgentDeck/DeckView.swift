@@ -69,7 +69,9 @@ struct ThreadRow: View {
                         .font(.system(size: 11, weight: .medium))
                         .lineLimit(1)
                     (Text(thread.status.label).foregroundStyle(dotColor.opacity(0.9))
-                        + Text(" · \(thread.source.short) · \(thread.projectName) · \(relTime)")
+                        + Text(" · ").foregroundStyle(.secondary)
+                        + Text(thread.source.short).foregroundStyle(brandColor.opacity(0.9))
+                        + Text(" · \(thread.projectName) · \(relTime)")
                         .foregroundStyle(.secondary))
                         .font(.system(size: 9))
                         .lineLimit(1)
@@ -99,7 +101,7 @@ struct ThreadRow: View {
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(hovering ? Color.white.opacity(0.08) : .clear,
+            .background(brandColor.opacity(hovering ? 0.14 : 0.06),
                         in: RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
         }
@@ -123,6 +125,11 @@ struct ThreadRow: View {
             }
         }
         .help(thread.cwd)
+    }
+
+    /// Claude = its signature coral/orange, Codex = blue.
+    private var brandColor: Color {
+        thread.source.isClaude ? Color(red: 0.85, green: 0.47, blue: 0.34) : Color.blue
     }
 
     private var dotColor: Color {
