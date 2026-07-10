@@ -18,7 +18,9 @@ struct DeckView: View {
             } else {
                 // ponytail: no ScrollView — the panel resizes to fit all rows (see resizeToFit).
                 VStack(spacing: 1) {
-                    ForEach(store.threads) { ThreadRow(thread: $0) }
+                    ForEach(store.threads) { t in
+                        ThreadRow(thread: t) { store.dismiss(t) }
+                    }
                 }
                 .padding(6)
             }
@@ -50,6 +52,7 @@ struct DeckView: View {
 
 struct ThreadRow: View {
     let thread: AgentThread
+    let onDismiss: () -> Void
     @State private var hovering = false
 
     var body: some View {
@@ -75,6 +78,15 @@ struct ThreadRow: View {
                     }
                 }
                 Spacer(minLength: 0)
+                if hovering {
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remove from deck (transcript untouched)")
+                }
             }
             .padding(.horizontal, 8).padding(.vertical, 5)
             .background(hovering ? Color.white.opacity(0.08) : .clear,
