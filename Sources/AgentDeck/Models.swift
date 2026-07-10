@@ -20,19 +20,24 @@ enum AgentSource: String {
 enum ThreadStatus: Int {
     case needsInput = 0  // asked a question / permission prompt / interrupted
     case error = 1       // API or task error
-    case working = 2     // actively streaming / running tools
-    case done = 3        // turn finished cleanly, nothing asked
-    case idle = 4        // no activity for a while
+    case stalled = 2     // says "working" but transcript went quiet — check it
+    case working = 3     // actively streaming / running tools
+    case done = 4        // turn finished cleanly, nothing asked
+    case idle = 5        // no activity for a while
 
     var label: String {
         switch self {
         case .needsInput: return "needs input"
         case .error: return "error"
+        case .stalled: return "stalled?"
         case .working: return "running"
         case .done: return "done"
         case .idle: return "idle"
         }
     }
+
+    /// Blocked on the user in some way — drives the badge, sort, and pings.
+    var actionable: Bool { rawValue <= ThreadStatus.stalled.rawValue }
 }
 
 struct AgentThread: Identifiable, Equatable {
@@ -45,6 +50,7 @@ struct AgentThread: Identifiable, Equatable {
     let lastActivity: Date
     var status: ThreadStatus // scanners store the content-derived status; Store overlays time rules
     var spawned = false      // tool-spawned worker (e.g. codex exec reviewer), not a human session
+    var prURL: String?       // newest pr-link record in the transcript, if any
 
     var projectName: String { (cwd as NSString).lastPathComponent }
 }

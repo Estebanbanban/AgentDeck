@@ -28,6 +28,7 @@ enum ClaudeScanner {
         var sessionId: String?
         var cwd: String?
         var entrypoint: String?
+        var prURL: String?
         var summaryParts: [String] = []
         var content: ThreadStatus?
 
@@ -35,6 +36,7 @@ enum ClaudeScanner {
             if sessionId == nil { sessionId = rec["sessionId"] as? String }
             if cwd == nil { cwd = rec["cwd"] as? String }
             if entrypoint == nil { entrypoint = rec["entrypoint"] as? String }
+            if prURL == nil, rec["type"] as? String == "pr-link" { prURL = rec["prUrl"] as? String }
             // Latest assistant text; if it's a stub ("Done."), pull in the one before it too.
             if summaryParts.count < 2, summaryParts.joined().count < 80,
                rec["type"] as? String == "assistant", let s = assistantText(rec) {
@@ -67,7 +69,7 @@ enum ClaudeScanner {
         let source: AgentSource = (entrypoint?.hasPrefix("claude-desktop") == true) ? .claudeApp : .claudeCLI
         return AgentThread(id: id, source: source, title: title, summary: summary,
                            cwd: cwd ?? ScanCore.home, filePath: path,
-                           lastActivity: mtime, status: contentStatus)
+                           lastActivity: mtime, status: contentStatus, prURL: prURL)
     }
 
     /// Status implied by the latest assistant record.

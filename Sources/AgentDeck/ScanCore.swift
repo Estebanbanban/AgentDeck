@@ -59,9 +59,9 @@ enum ScanCore {
     static func finalStatus(content: ThreadStatus, mtime: Date, now: Date = Date()) -> ThreadStatus {
         let age = now.timeIntervalSince(mtime)
         if age > Config.idleAfter { return .idle }
-        // ponytail: mid-tool-call with no writes for 3min = likely stuck on a
-        // permission prompt -> surface as needs-input so the user gets pinged.
-        if content == .working, age > 180 { return .needsInput }
+        // Mid-tool-call with no writes for 3min: permission prompt, hang, or just a
+        // long build — indistinguishable from silence, so say "stalled?" honestly.
+        if content == .working, age > 180 { return .stalled }
         return content
     }
 

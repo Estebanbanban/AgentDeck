@@ -67,7 +67,7 @@ final class Store: ObservableObject {
                 let age = -t.lastActivity.timeIntervalSinceNow
                 switch t.status {
                 case .working: return true
-                case .needsInput, .error: return age < Config.needsRetention
+                case .needsInput, .error, .stalled: return age < Config.needsRetention
                 case .done, .idle: return age < Config.doneRetention
                 }
             }

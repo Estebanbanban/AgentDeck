@@ -91,6 +91,16 @@ struct ThreadRow: View {
     // Always in the layout (opacity-only) so hovering never reflows the row.
     private var hoverButtons: some View {
         HStack(spacing: 5) {
+            if let pr = thread.prURL, let url = URL(string: pr) {
+                Button { NSWorkspace.shared.open(url) } label: {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.green.opacity(0.9))
+                }
+                .buttonStyle(.plain)
+                .opacity(hovering ? 1 : 0.55)
+                .help("Open PR #\((pr as NSString).lastPathComponent)")
+            }
             Button(action: onStar) {
                 Image(systemName: starred ? "star.fill" : "star")
                     .font(.system(size: 10))
@@ -152,6 +162,7 @@ struct ThreadRow: View {
         case .working: return .purple
         case .done: return .green
         case .needsInput: return .orange
+        case .stalled: return .yellow
         case .error: return .red
         case .idle: return Color.gray.opacity(0.5)
         }

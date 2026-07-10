@@ -17,14 +17,14 @@ final class Notifier {
         }
         guard primed else { return } // don't blast sounds for pre-existing state at launch
         for t in threads where lastStatus[t.id] == .working
-            && [.done, .needsInput, .error].contains(t.status) {
+            && [.done, .needsInput, .error, .stalled].contains(t.status) {
             notify(t)
         }
     }
 
     private func notify(_ t: AgentThread) {
         if !Config.muted {
-            let sound = [ThreadStatus.done: "Glass", .needsInput: "Ping", .error: "Basso"][t.status] ?? "Glass"
+            let sound = [ThreadStatus.done: "Glass", .needsInput: "Ping", .error: "Basso", .stalled: "Tink"][t.status] ?? "Glass"
             NSSound(named: sound)?.play()
         }
         guard Bundle.main.bundleIdentifier != nil else { return } // bare binary: sound only

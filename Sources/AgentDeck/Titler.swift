@@ -47,7 +47,7 @@ final class Titler {
                     title: e.title.isEmpty ? t.title : e.title,
                     summary: e.summary.isEmpty ? t.summary : e.summary,
                     cwd: t.cwd, filePath: t.filePath, lastActivity: t.lastActivity,
-                    status: t.status, spawned: t.spawned)
+                    status: t.status, spawned: t.spawned, prURL: t.prURL)
     }
 
     private func generate(_ t: AgentThread, keepTitle: String?) {

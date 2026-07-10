@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     var panel: NSPanel!
     var hosting: NSHostingView<DeckView>!
     var sub: AnyCancellable?
+    var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Notifier.log("launched")
@@ -21,8 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             panel = makePanel()
             panel.orderFrontRegardless()
             sub = store.$threads.receive(on: DispatchQueue.main).sink { [weak self] _ in
-                DispatchQueue.main.async { self?.resizeToFit() }
+                DispatchQueue.main.async { self?.resizeToFit(); self?.updateStatusItem() }
             }
+            installStatusItem()
             NotificationCenter.default.addObserver(forName: .agentDeckResize, object: nil,
                                                    queue: .main) { [weak self] _ in
                 DispatchQueue.main.async { self?.resizeToFit() }
@@ -45,6 +47,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             if e.characters == "£" { self?.toggleDeck(); return nil }
             return e
         }
+    }
+
+    /// Menu-bar badge: how many agents are blocked on you, visible with the deck hidden.
+    /// macOS 26.4 (verified by bisection): setting target/action — or any title — on the
+    /// button prevents the item from EVER materializing in the bar. Image-only is the one
+    /// config that renders, so clicks are caught by mouse monitors over the item's frame.
+    private func installStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        updateStatusItem()
+        let click: (NSEvent) -> Void = { [weak self] _ in
+            guard let self, let w = self.statusItem?.button?.window,
+                  w.frame.contains(NSEvent.mouseLocation) else { return }
+            self.toggleDeck()
+        }
+        NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: click)
+        NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { e in click(e); return e }
+    }
+
+    private var lastBadgeCount = -1
+
+    private func updateStatusItem() {
+        guard let btn = statusItem?.button else { return }
+        let needs = store.threads.filter { $0.status.actionable }.count
+        guard needs != lastBadgeCount else { return } // redrawing every tick is wasteful
+        lastBadgeCount = needs
+        btn.image = StatusBadge.image(count: needs) // no toolTip: see StatusBadge doc
     }
 
     private func toggleDeck() {
@@ -150,7 +178,7 @@ if CommandLine.arguments.contains("--dump") {
         .filter { !(Config.hideSpawned && $0.spawned) } // mirror the UI's filters
         .sorted { $0.lastActivity > $1.lastActivity }
     for t in all {
-        print("[\(t.status.label)] \(t.source.rawValue) | \(t.projectName) | \(t.title) | \(t.id.prefix(8)) | \(Int(-t.lastActivity.timeIntervalSinceNow))s ago")
+        print("[\(t.status.label)] \(t.source.rawValue) | \(t.projectName) | \(t.title) | \(t.id.prefix(8)) | \(Int(-t.lastActivity.timeIntervalSinceNow))s ago\(t.prURL.map { " | PR \($0)" } ?? "")")
         if !t.summary.isEmpty { print("        ↳ \(t.summary.prefix(100))") }
     }
     exit(0)

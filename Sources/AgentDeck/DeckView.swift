@@ -65,6 +65,7 @@ struct DeckView: View {
                 }
                 .padding(6)
             }
+            MusicBar()
         }
         .frame(width: compact ? 260 : 330)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -75,7 +76,7 @@ struct DeckView: View {
         HStack(spacing: 6) {
             Text("Agents").font(.system(size: 11, weight: .semibold))
             let running = store.threads.filter { $0.status == .working }.count
-            let needs = store.threads.filter { $0.status == .needsInput || $0.status == .error }.count
+            let needs = store.threads.filter { $0.status.actionable }.count
             Text("\(running) running").font(.system(size: 10))
                 .foregroundStyle(running > 0 ? Color.purple : .secondary)
             // Clicking the count jumps to the thread that's been waiting the longest.
@@ -110,7 +111,7 @@ struct DeckView: View {
     }
 
     private func jumpToOldestNeedsInput() {
-        let waiting = store.threads.filter { $0.status == .needsInput || $0.status == .error }
+        let waiting = store.threads.filter { $0.status.actionable }
         guard let oldest = waiting.min(by: { $0.lastActivity < $1.lastActivity }) else { return }
         Actions.open(oldest)
     }
