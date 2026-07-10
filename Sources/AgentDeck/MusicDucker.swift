@@ -10,7 +10,8 @@ final class MusicDucker {
     static let shared = MusicDucker()
     private let q = DispatchQueue(label: "agentdeck.ducker")          // state + volume ramps
     private let hookQ = DispatchQueue(label: "agentdeck.ducker.hook") // listener add/remove ONLY
-    private var inputDev: AudioDeviceID = 0
+    private var hooked: [AudioDeviceID] = [] // ALL input devices, not just the default:
+    // dictation can record from a non-default mic (FluidVoice picks its own device)
     private var savedVolume: Float32?
     private var micWasOpen = false
     private var fadeGen = 0 // bumping cancels an in-flight ramp
@@ -26,44 +27,50 @@ final class MusicDucker {
     }
 
     func start() {
-        var defAddr = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+        var listAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
-        // Follow default-input changes (AirPods in/out) by re-hooking the listener.
-        // On hookQ, NEVER q: RemovePropertyListenerBlock waits for in-flight listener
-        // blocks on the listener's queue — calling it from that same queue deadlocks
-        // it, which silently killed every scheduled restore (fade-out, no fade-in).
-        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &defAddr, hookQ) { [weak self] _, _ in
+        // Re-hook when the device list changes (AirPods in/out). On hookQ, NEVER q:
+        // RemovePropertyListenerBlock waits for in-flight listener blocks on the
+        // listener's queue — calling it from that same queue deadlocks it, which
+        // silently killed every scheduled restore (fade-out worked, no fade-in).
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &listAddr, hookQ) { [weak self] _, _ in
             self?.rehook()
         }
         hookQ.async { self.rehook() }
     }
 
-    private func rehook() { // runs on hookQ
-        if inputDev != 0 { AudioObjectRemovePropertyListenerBlock(inputDev, &runningAddr, q, micListener) }
-        inputDev = Self.defaultDevice(kAudioHardwarePropertyDefaultInputDevice)
-        guard inputDev != 0 else { return }
-        AudioObjectAddPropertyListenerBlock(inputDev, &runningAddr, q, micListener)
-        q.async { self.micChanged() } // evaluate the new device's current state
+    private func rehook() { // runs on hookQ; `hooked` itself is q-confined
+        let old = q.sync { hooked }
+        for d in old { AudioObjectRemovePropertyListenerBlock(d, &runningAddr, q, micListener) }
+        let fresh = Self.inputDevices()
+        for d in fresh { AudioObjectAddPropertyListenerBlock(d, &runningAddr, q, micListener) }
+        q.async { self.hooked = fresh; self.micChanged() }
     }
 
     private var restoreTask: DispatchWorkItem?
     private var cycle = 0 // bumped by each duck; stale restore-completions no-op
 
     private func micChanged() {
-        var run: UInt32 = 0
-        var sz = UInt32(MemoryLayout<UInt32>.size)
-        guard AudioObjectGetPropertyData(inputDev, &runningAddr, 0, nil, &sz, &run) == noErr else { return }
-        guard (run != 0) != micWasOpen else { return } // CoreAudio fires repeats; act on edges
-        micWasOpen = run != 0
-        Notifier.log("ducker: mic \(micWasOpen ? "OPEN" : "closed") dev=\(inputDev) vol=\(getVolume() ?? -1) saved=\(savedVolume ?? -1)")
-        micWasOpen ? duck() : unduck()
+        var open = false
+        for d in hooked {
+            var run: UInt32 = 0
+            var sz = UInt32(MemoryLayout<UInt32>.size)
+            if AudioObjectGetPropertyData(d, &runningAddr, 0, nil, &sz, &run) == noErr, run != 0 {
+                open = true
+                break
+            }
+        }
+        guard open != micWasOpen else { return } // CoreAudio fires repeats; act on edges
+        micWasOpen = open
+        Notifier.log("ducker: mic \(open ? "OPEN" : "closed") vol=\(getVolume() ?? -1) saved=\(savedVolume ?? -1) playing=\(MusicWatcher.shared.playingNow)")
+        open ? duck() : unduck()
     }
 
     private func duck() {
         restoreTask?.cancel(); restoreTask = nil
         cycle += 1
-        guard !Config.duckOff, MusicWatcher.shared.now?.playing == true else { return }
+        guard !Config.duckOff, MusicWatcher.shared.playingNow else { return }
         // savedVolume is the TRUE pre-duck volume: set once per cycle, never
         // overwritten while ducked/restoring — a mic flap mid-fade must not
         // capture the ducked level as "original" (that left volume stuck low).
@@ -126,5 +133,22 @@ final class MusicDucker {
         var sz = UInt32(MemoryLayout<AudioDeviceID>.size)
         AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &sz, &dev)
         return dev
+    }
+
+    private static func inputDevices() -> [AudioDeviceID] {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var sz: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &sz) == noErr
+        else { return [] }
+        var devs = [AudioDeviceID](repeating: 0, count: Int(sz) / MemoryLayout<AudioDeviceID>.size)
+        AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &sz, &devs)
+        return devs.filter { d in
+            var a = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamConfiguration,
+                mScope: kAudioDevicePropertyScopeInput, mElement: kAudioObjectPropertyElementMain)
+            var s: UInt32 = 0
+            return AudioObjectGetPropertyDataSize(d, &a, 0, nil, &s) == noErr && s > 8
+        }
     }
 }

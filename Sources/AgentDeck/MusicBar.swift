@@ -38,7 +38,7 @@ final class MusicWatcher: ObservableObject {
             while let nl = buf.firstIndex(of: "\n") {
                 let line = String(buf[..<nl])
                 buf = String(buf[buf.index(after: nl)...])
-                ingest(line)
+                q.async { self.ingest(line) } // state is confined to q
             }
         }
         p.terminationHandler = { [weak self] _ in // adapter died: recover quietly
@@ -48,7 +48,7 @@ final class MusicWatcher: ObservableObject {
         try? p.run()
     }
 
-    private func ingest(_ line: String) {
+    private func ingest(_ line: String) { // on q
         guard let j = ScanCore.json(line), j["type"] as? String == "data",
               let payload = j["payload"] as? [String: Any] else { return }
         if j["diff"] as? Bool == true {
@@ -56,6 +56,28 @@ final class MusicWatcher: ObservableObject {
         } else {
             state = payload
         }
+        // media-control sometimes emits an EMPTY diff:false (full replace with {})
+        // mid-stream; later diffs never re-send the title, so state stays broken
+        // forever — the bar vanished and ducking's playing-gate went dead. Self-heal
+        // with a one-shot full snapshot whenever a diff leaves us title-less.
+        if state["title"] as? String ?? "" == "", j["diff"] as? Bool == true { refill() }
+        publish()
+    }
+
+    private func refill() { // on q; blocking `get` is fine here, events are sparse
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: bin)
+        p.arguments = ["get"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = Pipe()
+        guard (try? p.run()) != nil else { return }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        if let j = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] { state = j }
+    }
+
+    private func publish() { // on q
         let title = state["title"] as? String ?? ""
         let next: Now? = title.isEmpty ? nil : Now(title: title,
                                                    artist: state["artist"] as? String ?? "",
@@ -67,6 +89,9 @@ final class MusicWatcher: ObservableObject {
             if structural { NotificationCenter.default.post(name: .agentDeckResize, object: nil) }
         }
     }
+
+    /// Ducker gate reads this on its own queue: a synchronous q-hop keeps it honest.
+    var playingNow: Bool { q.sync { state["playing"] as? Bool ?? false } }
 
     func toggle() { now?.playing.toggle(); cmd("toggle-play-pause") } // optimistic flip
     func next() { cmd("next-track") }
