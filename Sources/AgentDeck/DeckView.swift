@@ -12,13 +12,17 @@ struct DeckView: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             } else {
-                ScrollView {
-                    VStack(spacing: 1) {
-                        ForEach(store.threads) { ThreadRow(thread: $0) }
+                // ponytail: no ScrollView — the panel resizes to fit (see resizeToFit);
+                // cap at 14 rows so it can't take over the screen.
+                VStack(spacing: 1) {
+                    ForEach(store.threads.prefix(14)) { ThreadRow(thread: $0) }
+                    if store.threads.count > 14 {
+                        Text("+\(store.threads.count - 14) more")
+                            .font(.system(size: 9)).foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 3)
                     }
-                    .padding(6)
                 }
-                .frame(maxHeight: 440)
+                .padding(6)
             }
         }
         .frame(width: 330)

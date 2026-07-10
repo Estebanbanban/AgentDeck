@@ -2,9 +2,13 @@ import AppKit
 import SwiftUI
 import UserNotifications
 
+import Combine
+
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     let store = Store()
     var panel: NSPanel!
+    var hosting: NSHostingView<DeckView>!
+    var sub: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Notifier.log("launched")
@@ -16,7 +20,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if ProcessInfo.processInfo.environment["AGENTDECK_HEADLESS"] == nil {
             panel = makePanel()
             panel.orderFrontRegardless()
+            sub = store.$threads.receive(on: DispatchQueue.main).sink { [weak self] _ in
+                DispatchQueue.main.async { self?.resizeToFit() }
+            }
         }
+    }
+
+    /// Resize the panel to the SwiftUI content's ideal size, keeping its top-left corner fixed.
+    private func resizeToFit() {
+        guard let panel, let hosting else { return }
+        let size = hosting.fittingSize
+        guard size.height > 10, abs(panel.frame.height - size.height) > 1 else { return }
+        var f = panel.frame
+        f.origin.y += f.size.height - size.height
+        f.size = size
+        panel.setFrame(f, display: true)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -36,14 +54,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         p.isMovableByWindowBackground = true
         p.hidesOnDeactivate = false
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        p.contentView = NSHostingView(rootView: DeckView(store: store))
-        if !p.setFrameUsingName("AgentDeck") {
-            if let screen = NSScreen.main {
-                let f = screen.visibleFrame
-                p.setFrameTopLeftPoint(NSPoint(x: f.maxX - 350, y: f.maxY - 12))
-            }
+        hosting = NSHostingView(rootView: DeckView(store: store))
+        p.contentView = hosting
+        // Only the top-left POSITION is remembered; height always comes from content.
+        if !p.setFrameUsingName("AgentDeck"), let screen = NSScreen.main {
+            let f = screen.visibleFrame
+            p.setFrameTopLeftPoint(NSPoint(x: f.maxX - 350, y: f.maxY - 12))
         }
         p.setFrameAutosaveName("AgentDeck")
+        let topLeft = NSPoint(x: p.frame.minX, y: p.frame.maxY)
+        p.setContentSize(hosting.fittingSize)
+        p.setFrameTopLeftPoint(topLeft)
         return p
     }
 
