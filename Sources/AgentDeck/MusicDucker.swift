@@ -79,8 +79,7 @@ final class MusicDucker {
             savedVolume = vol
         }
         guard let base = savedVolume else { return }
-        // 30%: quiet enough to dictate over, loud enough to not read as "stopped".
-        fade(from: getVolume() ?? base, to: base * 0.30)
+        fade(from: getVolume() ?? base, to: 0) // full fade-out: silence while dictating
     }
 
     private func unduck() {

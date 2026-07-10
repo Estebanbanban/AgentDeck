@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
             installStatusItem()
             MusicDucker.shared.start()
+            MicPin.shared.start()
             NotificationCenter.default.addObserver(forName: .agentDeckResize, object: nil,
                                                    queue: .main) { [weak self] _ in
                 DispatchQueue.main.async { self?.resizeToFit() }

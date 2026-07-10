@@ -77,6 +77,8 @@ enum Config {
     static var aiTitlesOff: Bool { UserDefaults.standard.bool(forKey: "aiTitlesOff") }
     /// Kill switch for music ducking while the mic is in use.
     static var duckOff: Bool { UserDefaults.standard.bool(forKey: "duckOff") }
+    /// Kill switch for pinning the default input to the built-in mic.
+    static var micPinOff: Bool { UserDefaults.standard.bool(forKey: "micPinOff") }
 
     /// File written within this many seconds => working.
     static let workingWindow: TimeInterval = 25
